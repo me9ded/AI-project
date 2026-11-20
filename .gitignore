@@ -1,0 +1,12 @@
+# Secrets
+.env
+
+# Local vulnerability cache (SQLite)
+cache/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
