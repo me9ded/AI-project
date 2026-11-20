@@ -1,6 +1,10 @@
 """Tests for src/retrieval/osv_client.py (design spec section 5, test IDs O1-O9)."""
 
+import pytest
+import requests
+
 from src.retrieval.cache import SqliteCache
+from src.retrieval.rate_limiter import RetrievalError
 from src.retrieval.osv_client import OsvClient
 from tests.unit.fakes import FakeClock, FakeResponse, FakeSession, FakeSleep, load_fixture
 
@@ -118,3 +122,68 @@ def test_query_package_follows_page_tokens(tmp_path):
     assert "page_token" not in session.calls[0]["json"]
     assert session.calls[1]["json"]["page_token"] == "abc"
     assert session.calls[1]["json"]["package"] == {"name": "jinja2", "ecosystem": "PyPI"}
+
+
+ONE_DAY = 24 * 60 * 60
+OFFLINE = [requests.ConnectionError("offline")] * 4  # first try + 3 retries
+
+
+# O6: OSV is down but an old answer is cached -> use it and say it is stale.
+def test_query_package_falls_back_to_stale_cache_when_osv_is_down(tmp_path):
+    clock = FakeClock()
+    fixture = load_fixture("osv_query_log4j_core_2.14.1.json")
+    client, _, _ = make_client(tmp_path, [FakeResponse(200, fixture), *OFFLINE], clock)
+    client.query_package(LOG4J_CORE, "Maven", "2.14.1")
+    clock.advance(ONE_DAY * 2)
+
+    vulns, is_stale = client.query_package(LOG4J_CORE, "Maven", "2.14.1")
+
+    assert len(vulns) == 8
+    assert is_stale is True
+
+
+def test_query_package_raises_when_osv_is_down_and_nothing_cached(tmp_path):
+    client, _, _ = make_client(tmp_path, OFFLINE)
+
+    with pytest.raises(RetrievalError):
+        client.query_package(LOG4J_CORE, "Maven", "2.14.1")
+
+
+# O8: a body that is not JSON is a retrieval failure, so the stale fallback still works.
+def test_bad_json_raises_retrieval_error(tmp_path):
+    client, _, _ = make_client(tmp_path, [FakeResponse(200, ValueError("Expecting value"))])
+
+    with pytest.raises(RetrievalError):
+        client.query_package(LOG4J_CORE, "Maven", "2.14.1")
+
+
+def test_bad_json_falls_back_to_stale_cache(tmp_path):
+    clock = FakeClock()
+    fixture = load_fixture("osv_vuln_GHSA-jfh8-c2jp-5v3q.json")
+    client, _, _ = make_client(
+        tmp_path, [FakeResponse(200, fixture), FakeResponse(200, ValueError("Expecting value"))], clock
+    )
+    client.get_vuln("GHSA-jfh8-c2jp-5v3q")
+    clock.advance(ONE_DAY * 2)
+
+    vuln, is_stale = client.get_vuln("GHSA-jfh8-c2jp-5v3q")
+
+    assert vuln["id"] == "GHSA-jfh8-c2jp-5v3q"
+    assert is_stale is True
+
+
+# O9: an advisory ID OSV does not know (typo, fake ID in the input) is "not found", not an outage.
+def test_get_vuln_unknown_id_returns_none(tmp_path):
+    client, _, _ = make_client(tmp_path, [FakeResponse(404, {"code": 5, "message": "Bug not found."})])
+
+    vuln, is_stale = client.get_vuln("GHSA-xxxx-xxxx-xxxx")
+
+    assert vuln is None
+    assert is_stale is False
+
+
+def test_get_vuln_raises_when_osv_is_down_and_nothing_cached(tmp_path):
+    client, _, _ = make_client(tmp_path, OFFLINE)
+
+    with pytest.raises(RetrievalError):
+        client.get_vuln("GHSA-jfh8-c2jp-5v3q")

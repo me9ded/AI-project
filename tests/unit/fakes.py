@@ -11,13 +11,18 @@ import requests
 
 
 class FakeResponse:
-    """A minimal stand-in for requests.Response."""
+    """A minimal stand-in for requests.Response.
+
+    If `json_data` is an exception, json() raises it (e.g. a body that is not JSON).
+    """
 
     def __init__(self, status_code=200, json_data=None):
         self.status_code = status_code
         self._json_data = json_data
 
     def json(self):
+        if isinstance(self._json_data, Exception):
+            raise self._json_data
         return self._json_data
 
     def raise_for_status(self):
