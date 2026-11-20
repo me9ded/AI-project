@@ -62,3 +62,7 @@ class SqliteCache:
         # A short-lived connection per call keeps things simple and thread-safe.
         with closing(sqlite3.connect(self.path)) as connection, connection:
             connection.execute(sql, parameters)
+
+
+def cached_fetch(cache, key, fetch):
+    raise NotImplementedError

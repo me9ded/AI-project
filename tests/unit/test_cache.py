@@ -1,6 +1,9 @@
 """Tests for src/retrieval/cache.py (design spec section 8.1-8.2, test IDs C1-C8)."""
 
-from src.retrieval.cache import SqliteCache
+import pytest
+
+from src.retrieval.cache import SqliteCache, cached_fetch
+from src.retrieval.rate_limiter import RetrievalError
 from tests.unit.fakes import FakeClock
 
 ONE_DAY = 24 * 60 * 60
@@ -59,3 +62,85 @@ def test_entries_survive_reopening_the_file(tmp_path):
     reopened = make_cache(tmp_path, clock)
 
     assert reopened.get("osv:vuln:GHSA-jfh8-c2jp-5v3q") == {"id": "GHSA-jfh8-c2jp-5v3q"}
+
+
+# ---------------------------------------------------------------------------
+# cached_fetch(cache, key, fetch) -> (value, is_stale)   (design spec section 8.2)
+# ---------------------------------------------------------------------------
+
+class FakeFetch:
+    """Counts calls; returns `value`, or raises `error` if one is given."""
+
+    def __init__(self, value=None, error=None):
+        self.value = value
+        self.error = error
+        self.calls = 0
+
+    def __call__(self):
+        self.calls += 1
+        if self.error is not None:
+            raise self.error
+        return self.value
+
+
+# C5: a fresh cache hit means no network call.
+def test_cached_fetch_uses_fresh_cache_without_fetching(tmp_path):
+    cache = make_cache(tmp_path)
+    cache.set("kev:catalog", {"cves": ["CVE-2021-44228"]})
+    fetch = FakeFetch(value={"cves": []})
+
+    value, is_stale = cached_fetch(cache, "kev:catalog", fetch)
+
+    assert value == {"cves": ["CVE-2021-44228"]}
+    assert is_stale is False
+    assert fetch.calls == 0
+
+
+# C6: a miss fetches once and stores the result for next time.
+def test_cached_fetch_fetches_and_stores_on_miss(tmp_path):
+    cache = make_cache(tmp_path)
+    fetch = FakeFetch(value=LOG4J_QUERY)
+
+    value, is_stale = cached_fetch(cache, "osv:query:Maven:log4j-core:2.14.1", fetch)
+
+    assert value == LOG4J_QUERY
+    assert is_stale is False
+    assert fetch.calls == 1
+    assert cache.get("osv:query:Maven:log4j-core:2.14.1") == LOG4J_QUERY
+
+
+def test_cached_fetch_refetches_when_entry_expired(tmp_path):
+    clock = FakeClock()
+    cache = make_cache(tmp_path, clock)
+    cache.set("nvd:cve:CVE-2021-44228", {"score": 9.9})
+    clock.advance(ONE_DAY)
+    fetch = FakeFetch(value={"score": 10.0})
+
+    value, is_stale = cached_fetch(cache, "nvd:cve:CVE-2021-44228", fetch)
+
+    assert value == {"score": 10.0}
+    assert is_stale is False
+    assert fetch.calls == 1
+
+
+# C7: the API is down but we have old data -> use it and say it is stale.
+def test_cached_fetch_falls_back_to_stale_value_when_fetch_fails(tmp_path):
+    clock = FakeClock()
+    cache = make_cache(tmp_path, clock)
+    cache.set("nvd:cve:CVE-2021-44228", {"score": 10.0})
+    clock.advance(ONE_DAY * 3)
+    fetch = FakeFetch(error=RetrievalError("NVD unavailable"))
+
+    value, is_stale = cached_fetch(cache, "nvd:cve:CVE-2021-44228", fetch)
+
+    assert value == {"score": 10.0}
+    assert is_stale is True
+
+
+# C8: the API is down and nothing is cached -> the error reaches the caller.
+def test_cached_fetch_raises_when_fetch_fails_and_nothing_cached(tmp_path):
+    cache = make_cache(tmp_path)
+    fetch = FakeFetch(error=RetrievalError("NVD unavailable"))
+
+    with pytest.raises(RetrievalError):
+        cached_fetch(cache, "nvd:cve:CVE-2021-44228", fetch)
