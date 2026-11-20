@@ -162,6 +162,28 @@ def test_git_ranges_are_ignored():
     assert is_affected("1.0", entry, "PyPI") is False
 
 
+# V15: the OSV schema does not require events to be in order, so we sort them first.
+def test_unsorted_events_are_sorted_before_matching():
+    entry = make_entry(
+        ("ECOSYSTEM", [{"introduced": "1.0"}, {"introduced": "2.0"}, {"fixed": "2.5"}, {"fixed": "1.5"}])
+    )
+
+    assert is_affected("0.9", entry, "PyPI") is False
+    assert is_affected("1.2", entry, "PyPI") is True
+    assert is_affected("1.7", entry, "PyPI") is False
+    assert is_affected("2.1", entry, "PyPI") is True
+    assert is_affected("2.6", entry, "PyPI") is False
+
+
+def test_unsorted_last_affected_events():
+    entry = make_entry(
+        ("ECOSYSTEM", [{"last_affected": "1.5"}, {"introduced": "0"}])
+    )
+
+    assert is_affected("1.5", entry, "PyPI") is True
+    assert is_affected("1.6", entry, "PyPI") is False
+
+
 # ---------------------------------------------------------------------------
 # Fixes: fixed_versions() and lowest_fix() (design spec section 6.3).
 # ---------------------------------------------------------------------------
