@@ -64,7 +64,8 @@ Mark a box only when its tests are green and committed.
 - [x] `nvd_CVE-2021-44228.json`: NVD CVE lookup
 - [x] `nvd_not_found.json`: NVD response with `totalResults: 0`
 - [x] `kev_excerpt.json`: KEV feed trimmed to a few entries, including CVE-2021-44228
-- [ ] Trim large fields so each file stays readable. Commit: `test: add task 2 API fixtures`
+- [x] Trim large fields so each file stays readable; sources and trimming rules in `tests/fixtures/t2/README.md`
+- [x] Red/Green: `test_fixtures.py` sanity checks (8 tests), incl. real OSV data → 2.14.1 affected, 2.17.1 fixes the 4 demo CVEs
 
 ## 6. OSV client – `osv_client.py`
 - [ ] Red: `test_osv_client.py`, cases O1–O8 (O8: bad JSON → `RetrievalError`)
@@ -72,7 +73,7 @@ Mark a box only when its tests are green and committed.
 - [ ] Refactor
 
 ## 7. NVD client – `nvd_client.py`
-- [ ] Red: `test_nvd_client.py`, cases N1–N11 (N10: bad JSON; N11: confirm NVD's 403 rate-limit answer, retry it)
+- [ ] Red: `test_nvd_client.py`, cases N1–N12 (N10: bad JSON; N12: ignore non-CVSS metrics; N11: confirm NVD's 403 rate-limit answer, retry it)
 - [ ] Green: `NvdClient.get_cve()` → `NvdCve(id, summary, cvss_score, cwes)`
 - [ ] Refactor
 
@@ -82,7 +83,7 @@ Mark a box only when its tests are green and committed.
 - [ ] Refactor
 
 ## 9. Service – `vulnerability_service.py`
-- [ ] Red: happy path, cases S1–S3, S16, S17 (Log4Shell)
+- [ ] Red: happy path, cases S1–S3, S16, S17, S20 (Log4Shell from the real fixture: 8 vulns, upgrade 2.25.4; merge per-branch entries)
 - [ ] Green: package flow, NVD/KEV enrichment, severity, sources, upgrades, sorting
 - [ ] Red: matching and keys, cases S4–S10
 - [ ] Green: version double-check, advisory and CVE inputs, merge/de-duplicate
@@ -116,7 +117,8 @@ Mark a box only when its tests are green and committed.
 | cache | C1–C8 | ☑ 10 passing |
 | rate_limiter | R1–R9 | ☑ 12 passing |
 | osv_client | O1–O8 | ☐ |
-| nvd_client | N1–N11 | ☐ |
+| nvd_client | N1–N12 | ☐ |
 | kev_client | K1–K4 | ☐ |
-| vulnerability_service | S1–S19 | ☐ |
+| vulnerability_service | S1–S20 | ☐ |
+| fixtures | sanity | ☑ 8 passing |
 | live | L1–L2 | ☐ |

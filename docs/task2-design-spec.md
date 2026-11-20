@@ -229,7 +229,9 @@ From 2.11.0 the same data gives **2.12.4**, because the 2.12 branch fixes for al
 
 ### 7.1 Steps
 1. **Packages.** For each package with a known ecosystem, call `osv.query_package(name, ecosystem, version)`.
-   For each OSV vuln, find the `affected` entry for this package, then:
+   For each OSV vuln, take **all** `affected` entries for this package (same ecosystem, name compared
+   case-insensitively) and merge their `ranges` and `versions` into one entry. Real OSV data splits a package
+   into one entry per release branch (CVE-2021-44228 has three for log4j-core). Then:
    - if there is a version, call `is_affected()`. Drop the vuln if the answer is False; this double-checks OSV.
    - if there is no version, set `affected = None`.
    - collect `fixed_versions` from that entry's `fixed` events.
@@ -389,6 +391,7 @@ Clocks and `sleep` are fakes, so no test actually waits.
 | N1 | `api_key="k"` | `apiKey: k` header sent | NFR3 |
 | N2 | no key | no `apiKey` header | NFR3 |
 | N3 | CVE-2021-44228 fixture | score 10.0, `cwes` contains `CWE-502`, English summary | FR5 |
+| N12 | fixture's non-CVSS `ssvcV203` metric | ignored, score still 10.0 | FR5 |
 | N4 | metrics only V30 / only V2 | V30 / V2 score used | FR5 |
 | N5 | Primary and Secondary V31 metrics | Primary used | FR5 |
 | N6 | no metrics | score `None` | FR5/FR10 |
@@ -409,9 +412,9 @@ Clocks and `sleep` are fakes, so no test actually waits.
 ### 9.8 `test_vulnerability_service.py` (fake clients)
 | ID | Case | Expect | Req |
 |----|------|--------|-----|
-| S1 | Log4Shell extraction (proposal §4.3) | records 44228, 45046, 45105, 44832; all `affected=True` | FR2 |
+| S1 | Log4Shell extraction (proposal §4.3), fake OSV returns the saved log4j fixture | 8 records including 44228, 45046, 45105, 44832; all `affected=True` | FR2 |
 | S2 | same | 44228: `in_kev=True`, `cvss_score=10.0`, `severity=CRITICAL` | FR5/6/10 |
-| S3 | same | `recommended_upgrades["org.apache.logging.log4j:log4j-core"] == "2.17.1"` | FR8 |
+| S3 | same | `recommended_upgrades["org.apache.logging.log4j:log4j-core"] == "2.25.4"` (all 8 vulns; 2.17.1 covers only the 4 from 2021) | FR8 |
 | S4 | OSV returns a vuln whose range excludes the version | dropped | FR2 |
 | S5 | `version: null` | records have `affected=None` | FR3 |
 | S6 | `advisory_ids=["GHSA-jfh8-c2jp-5v3q"]` | record id `CVE-2021-44228`, GHSA in aliases | FR4 |
@@ -425,6 +428,7 @@ Clocks and `sleep` are fakes, so no test actually waits.
 | S14 | empty extraction | empty result, zero client calls | §7.2 |
 | S15 | every output ID (`id` + `aliases`) is in the input or in a fake response | True | FR11 |
 | S16 | records sorted by score, highest first, `None` last | True | §4.2 |
+| S20 | one vuln with several `affected` entries for the package (per-branch) | entries merged; 2.14.1 matched by the third entry | FR2 |
 | S17 | `sources` includes the NVD and OSV URLs, plus the KEV URL when `in_kev` | True | §7.4 |
 | S18 | NVD gives up on the first CVE | no further NVD calls in this request; the rest use cache or OSV data, one warning | NFR2 |
 | S19 | OSV entry with an unparsable version | that vuln is skipped with a warning, the rest still returned | §7.2 |
@@ -432,7 +436,7 @@ Clocks and `sleep` are fakes, so no test actually waits.
 ### 9.9 `tests/integration/test_live.py` (`@pytest.mark.live`, skipped by default)
 | ID | Case | Expect |
 |----|------|--------|
-| L1 | `retrieve()` on the Log4Shell extraction with the real APIs | the 4 CVEs present, 44228 CVSS 10.0 and in KEV, upgrade 2.17.1 |
+| L1 | `retrieve()` on the Log4Shell extraction with the real APIs | the 4 demo CVEs present (OSV may return newer ones too), 44228 CVSS 10.0 and in KEV, upgrade ≥ 2.17.1 |
 | L2 | PyPI `jinja2==2.10` | at least one CVE, `affected=True` |
 
 ### 9.10 Build order (one Red-Green-Refactor cycle each, two commits per cycle)
