@@ -60,6 +60,17 @@ def test_real_osv_data_marks_2_14_1_affected_and_fixed_in_2_17_1():
     assert lowest_fix("2.14.1", entries, "Maven") == "2.17.1"
 
 
+def test_real_osv_data_needs_2_25_4_to_fix_all_eight_vulns():
+    """Pins the answer spec test S3 relies on. The three 2026 CVEs are fixed only in
+    2.25.4, so no lower version is safe. Update this after a fixture refresh."""
+    vulns = load_fixture("osv_query_log4j_core_2.14.1.json")["vulns"]
+    entries = [package_entry(vuln, LOG4J_CORE, "Maven") for vuln in vulns]
+
+    assert len(entries) == 8
+    assert all(is_affected("2.14.1", entry, "Maven") for entry in entries)
+    assert lowest_fix("2.14.1", entries, "Maven") == "2.25.4"
+
+
 def test_osv_vuln_lookup_links_ghsa_to_log4shell():
     vuln = load_fixture("osv_vuln_GHSA-jfh8-c2jp-5v3q.json")
 
