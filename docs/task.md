@@ -28,7 +28,7 @@ Mark a box only when its tests are green and committed.
 ## 1. Models – `vulnerability_models.py`
 - [x] Red: `test_vulnerability_models.py`, cases M1–M5
 - [x] Green: `Severity`, `severity_from_score()`, `severity_from_label()`, `VulnerabilityRecord`, `RetrievalResult`
-- [ ] Refactor
+- [x] Refactor (nothing needed: code already small and clear)
 
 ## 2. Version matcher – `version_matcher.py`
 - [ ] Red: parsing, cases V1, V4, V6
@@ -107,7 +107,7 @@ Mark a box only when its tests are green and committed.
 ## Progress
 | Module | Tests | Status |
 |--------|-------|--------|
-| models | M1–M5 | ☐ |
+| models | M1–M5 | ☑ 24 passing |
 | version_matcher | V1–V14 | ☐ |
 | cache | C1–C8 | ☐ |
 | rate_limiter | R1–R7 | ☐ |
