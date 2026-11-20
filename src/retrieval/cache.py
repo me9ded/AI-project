@@ -11,6 +11,8 @@ import time
 from contextlib import closing
 from pathlib import Path
 
+from src.retrieval.rate_limiter import RetrievalError
+
 _CREATE_TABLE = """
 CREATE TABLE IF NOT EXISTS cache (
     key        TEXT PRIMARY KEY,
@@ -64,5 +66,25 @@ class SqliteCache:
             connection.execute(sql, parameters)
 
 
-def cached_fetch(cache, key, fetch):
-    raise NotImplementedError
+def cached_fetch(cache: SqliteCache, key: str, fetch) -> tuple:
+    """Return (value, is_stale) for `key`, calling `fetch()` only when needed.
+
+    1. Fresh cache entry -> use it, no network call.
+    2. Otherwise fetch, store and return the new value.
+    3. If fetching fails, fall back to a stale entry (is_stale=True).
+    4. If there is no stale entry either, the RetrievalError reaches the caller.
+    """
+    value = cache.get(key)
+    if value is not None:
+        return value, False
+
+    try:
+        value = fetch()
+    except RetrievalError:
+        stale = cache.get_stale(key)
+        if stale is None:
+            raise
+        return stale, True
+
+    cache.set(key, value)
+    return value, False
