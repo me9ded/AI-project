@@ -192,3 +192,31 @@ def test_success_on_first_try_does_not_sleep():
 
     assert result is ok
     assert sleep.calls == []
+
+
+# R10: the error keeps the HTTP status, so callers can tell "not found" from "down".
+def test_error_keeps_http_status_code():
+    session = FakeSession([FakeResponse(404)])
+
+    with pytest.raises(RetrievalError) as error:
+        with_retries(lambda: session.get(URL, timeout=10), sleep=FakeSleep())
+
+    assert error.value.status_code == 404
+
+
+def test_error_keeps_last_status_after_retries():
+    session = FakeSession([FakeResponse(503)] * 4)
+
+    with pytest.raises(RetrievalError) as error:
+        with_retries(lambda: session.get(URL, timeout=10), sleep=FakeSleep())
+
+    assert error.value.status_code == 503
+
+
+def test_network_error_has_no_status_code():
+    session = FakeSession([requests.ConnectionError("offline")] * 4)
+
+    with pytest.raises(RetrievalError) as error:
+        with_retries(lambda: session.get(URL, timeout=10), sleep=FakeSleep())
+
+    assert error.value.status_code is None
