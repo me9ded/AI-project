@@ -99,7 +99,7 @@ NVD CPE configuration matching (OSV ranges are more precise for packages), and a
 | `version_matcher.py` | `parse_version()`, `is_affected()`, `fixed_versions()`, `lowest_fix()` | packaging |
 | `cache.py` | `SqliteCache`, `cached_fetch()` | sqlite3, json |
 | `rate_limiter.py` | `RateLimiter`, `with_retries()`, `RetrievalError` | requests (exceptions only) |
-| `osv_client.py` | `OsvClient.query_package()`, `OsvClient.get_vuln()` | cache, rate_limiter |
+| `osv_client.py` | `OsvClient(session, cache, sleep)`: `query_package()` → `(vulns, is_stale)`, `get_vuln()` → `(vuln or None, is_stale)` | cache, rate_limiter |
 | `nvd_client.py` | `NvdClient.get_cve()` → `NvdCve` | cache, rate_limiter |
 | `kev_client.py` | `KevClient.is_exploited()` | cache, rate_limiter |
 | `vulnerability_service.py` | `VulnerabilityService.retrieve()` | all clients, version_matcher, models |
@@ -310,7 +310,8 @@ NVD: `RateLimiter(50, 30)` with a key, `RateLimiter(5, 30)` without one. Create 
 ### 8.4 `with_retries(call, sleep, retries=3, base_delay=1.0)`
 - Retryable: `requests.ConnectionError`, `requests.Timeout`, HTTP 429, HTTP 5xx.
 - Delays: `base_delay * 2**attempt` → 1, 2, 4 s.
-- Any other 4xx, or running out of retries → `RetrievalError` with the cause attached.
+- Any other 4xx, or running out of retries → `RetrievalError` with the cause attached. Its `status_code` is the last
+  HTTP status (e.g. 404), or `None` when the API could not be reached, so callers can tell "not found" from "down".
 - Every HTTP call uses `timeout=10`.
 
 ---
@@ -374,6 +375,7 @@ Clocks and `sleep` are fakes, so no test actually waits.
 | R7 | `with_retries`: 429 then 200 | retried once | NFR4 |
 | R8 | sleep wakes 10 ms early (coarse clock) | sleeps again, 6th call at t ≥ 30 | NFR3 |
 | R9 | two threads share a limit-1 limiter | the second thread waits 30 s | NFR3 |
+| R10 | 404; 503 four times; ConnectionError four times | `status_code` 404, 503, `None` | NFR4 |
 
 ### 9.5 `test_osv_client.py`
 | ID | Case | Expect | Req |
@@ -386,6 +388,7 @@ Clocks and `sleep` are fakes, so no test actually waits.
 | O6 | HTTP fails, stale cache exists | stale data, `is_stale=True` | NFR2 |
 | O7 | `get_vuln("GHSA-jfh8-c2jp-5v3q")` | GET `/v1/vulns/GHSA-jfh8-c2jp-5v3q`, aliases incl. CVE-2021-44228 | FR4 |
 | O8 | response body is not valid JSON | `RetrievalError` (so `cached_fetch` can fall back to stale data) | NFR2 |
+| O9 | `get_vuln` of an ID OSV doesn't know (HTTP 404) | `(None, False)`, not an error: the service skips it without marking the result incomplete | FR4, FR11 |
 
 ### 9.6 `test_nvd_client.py`
 | ID | Case | Expect | Req |

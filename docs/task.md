@@ -70,9 +70,12 @@ Mark a box only when its tests are green and committed.
 - [ ] Service (Task 9): switch `test_fixtures.py`'s `package_entry` helper to the service's merge helper so there is one version
 
 ## 6. OSV client – `osv_client.py`
-- [ ] Red: `test_osv_client.py`, cases O1–O8 (O8: bad JSON → `RetrievalError`)
-- [ ] Green: `OsvClient.query_package()` (with paging), `OsvClient.get_vuln()`
-- [ ] Refactor
+- [x] Red: `test_osv_client.py`, cases O1–O3, O5, O7
+- [x] Green: `OsvClient.query_package()`, `OsvClient.get_vuln()` with caching
+- [x] Red/Green: paging (O4)
+- [x] Red/Green: `RetrievalError.status_code` in `rate_limiter.py` (R10)
+- [x] Red/Green: stale fallback (O6), bad JSON → `RetrievalError` (O8), unknown advisory → `None` (O9)
+- [x] Refactor (`_post`/`_get` helpers, plainer paging loop)
 
 ## 7. NVD client – `nvd_client.py`
 - [ ] Red: `test_nvd_client.py`, cases N1–N13 (N10: bad JSON; N12: ignore non-CVSS metrics; N13: CVSS v4.0 between v3.1 and v3.0; N11: confirm NVD's 403 rate-limit answer, retry it)
@@ -117,8 +120,8 @@ Mark a box only when its tests are green and committed.
 | models | M1–M5 | ☑ 24 passing |
 | version_matcher | V1–V16 | ☑ 34 passing |
 | cache | C1–C8 | ☑ 10 passing |
-| rate_limiter | R1–R9 | ☑ 12 passing |
-| osv_client | O1–O8 | ☐ |
+| rate_limiter | R1–R10 | ☑ 15 passing |
+| osv_client | O1–O9 | ☑ 15 passing |
 | nvd_client | N1–N13 | ☐ |
 | kev_client | K1–K4 | ☐ |
 | vulnerability_service | S1–S21 | ☐ |
