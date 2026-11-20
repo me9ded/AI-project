@@ -31,17 +31,12 @@ class OsvClient:
 
         def fetch():
             vulns = []
-            page_body = body
-            while True:  # OSV pages long results; follow next_page_token until it is gone
-                response = with_retries(
-                    lambda: self.session.post(QUERY_URL, json=page_body, timeout=TIMEOUT_SECONDS), sleep=self.sleep
-                )
-                page = _read_json(response)
+            page = self._post(body)
+            vulns.extend(page.get("vulns", []))
+            while page.get("next_page_token"):  # OSV pages long results
+                page = self._post({**body, "page_token": page["next_page_token"]})
                 vulns.extend(page.get("vulns", []))
-                token = page.get("next_page_token")
-                if not token:
-                    return {"vulns": vulns}
-                page_body = {**body, "page_token": token}
+            return {"vulns": vulns}
 
         data, is_stale = cached_fetch(self.cache, key, fetch)
         return data["vulns"], is_stale
@@ -49,18 +44,22 @@ class OsvClient:
     def get_vuln(self, vuln_id: str) -> tuple[dict | None, bool]:
         """One OSV entry by ID (GHSA-…, PYSEC-…, CVE-…). Returns (vuln, is_stale).
         An ID OSV does not know gives (None, False): a typo, not an outage."""
-        url = VULN_URL.format(id=vuln_id)
-
-        def fetch():
-            response = with_retries(lambda: self.session.get(url, timeout=TIMEOUT_SECONDS), sleep=self.sleep)
-            return _read_json(response)
-
         try:
-            return cached_fetch(self.cache, f"osv:vuln:{vuln_id}", fetch)
+            return cached_fetch(self.cache, f"osv:vuln:{vuln_id}", lambda: self._get(VULN_URL.format(id=vuln_id)))
         except RetrievalError as error:
             if error.status_code == 404:
                 return None, False
             raise
+
+    def _post(self, body: dict) -> dict:
+        response = with_retries(
+            lambda: self.session.post(QUERY_URL, json=body, timeout=TIMEOUT_SECONDS), sleep=self.sleep
+        )
+        return _read_json(response)
+
+    def _get(self, url: str) -> dict:
+        response = with_retries(lambda: self.session.get(url, timeout=TIMEOUT_SECONDS), sleep=self.sleep)
+        return _read_json(response)
 
 
 def _read_json(response) -> dict:
