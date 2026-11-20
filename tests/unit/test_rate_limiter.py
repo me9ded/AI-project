@@ -64,6 +64,30 @@ def test_window_slides_with_each_call():
     assert clock() == 30
 
 
+
+class EarlyWakeSleep(FakeSleep):
+    """Like FakeSleep, but the first sleep wakes 10 ms early, like a coarse clock
+    (Windows' monotonic clock only ticks every 15.6 ms)."""
+
+    def __call__(self, seconds):
+        self.calls.append(seconds)
+        early_by = 0.01 if len(self.calls) == 1 else 0.0
+        self.clock.advance(seconds - early_by)
+
+
+# R8: after sleeping, check again that there is room before recording the call.
+def test_waking_early_does_not_let_an_extra_call_through():
+    clock = FakeClock()
+    sleep = EarlyWakeSleep(clock)
+    limiter = RateLimiter(5, 30, clock=clock, sleep=sleep)
+    for _ in range(5):
+        limiter.acquire()
+
+    limiter.acquire()
+
+    assert clock() >= 30
+    assert len(sleep.calls) == 2
+
 # ---------------------------------------------------------------------------
 # with_retries: exponential backoff 1, 2, 4 s on 429 / 5xx / connection errors.
 # ---------------------------------------------------------------------------
