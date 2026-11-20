@@ -63,7 +63,7 @@ Mark a box only when its tests are green and committed.
 - [x] `osv_query_jinja2_2.10.json`: OSV query for PyPI `jinja2` 2.10
 - [x] `nvd_CVE-2021-44228.json`: NVD CVE lookup
 - [x] `nvd_not_found.json`: NVD response with `totalResults: 0`
-- [ ] `kev_excerpt.json`: KEV feed trimmed to a few entries, including CVE-2021-44228
+- [x] `kev_excerpt.json`: KEV feed trimmed to a few entries, including CVE-2021-44228
 - [ ] Trim large fields so each file stays readable. Commit: `test: add task 2 API fixtures`
 
 ## 6. OSV client – `osv_client.py`
