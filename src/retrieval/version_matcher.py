@@ -46,8 +46,41 @@ def _dotted_key(version: str) -> tuple:
     return (tuple(numbers), is_release, qualifier)
 
 
-def is_affected(version, affected_entry, ecosystem):
-    raise NotImplementedError
+def is_affected(version: str, affected_entry: dict, ecosystem: str) -> bool:
+    """True if `version` is listed in, or falls inside a range of, an OSV 'affected' entry."""
+    if version in affected_entry.get("versions", []):
+        return True
+
+    parsed = parse_version(version, ecosystem)
+    for version_range in affected_entry.get("ranges", []):
+        if version_range.get("type") not in ("ECOSYSTEM", "SEMVER"):
+            continue  # GIT ranges use commit hashes, not versions
+        if _in_range(parsed, version_range.get("events", []), ecosystem):
+            return True
+    return False
+
+
+def _in_range(parsed, events: list[dict], ecosystem: str) -> bool:
+    """Walk OSV events in order. `introduced` opens an interval; `fixed` closes it
+    (excluded) and `last_affected` closes it (included). An unclosed interval runs forever."""
+    start = None
+    for event in events:
+        if "introduced" in event:
+            start = event["introduced"]
+        elif "fixed" in event and start is not None:
+            if _at_or_after(parsed, start, ecosystem) and parsed < parse_version(event["fixed"], ecosystem):
+                return True
+            start = None
+        elif "last_affected" in event and start is not None:
+            if _at_or_after(parsed, start, ecosystem) and parsed <= parse_version(event["last_affected"], ecosystem):
+                return True
+            start = None
+    return start is not None and _at_or_after(parsed, start, ecosystem)
+
+
+def _at_or_after(parsed, start: str, ecosystem: str) -> bool:
+    """OSV uses introduced "0" to mean 'from the very first version'."""
+    return start == "0" or parsed >= parse_version(start, ecosystem)
 
 
 def fixed_versions(affected_entry):
