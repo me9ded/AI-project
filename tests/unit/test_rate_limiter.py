@@ -1,5 +1,8 @@
 """Tests for src/retrieval/rate_limiter.py (design spec section 8.3-8.4, test IDs R1-R7)."""
 
+import threading
+import time
+
 import pytest
 import requests
 
@@ -87,6 +90,30 @@ def test_waking_early_does_not_let_an_extra_call_through():
 
     assert clock() >= 30
     assert len(sleep.calls) == 2
+
+
+class SlowClock(FakeClock):
+    """A FakeClock that takes 20 ms (real time) to read. This holds a thread
+    between "is there room?" and "record the call", so a missing lock shows up."""
+
+    def __call__(self):
+        time.sleep(0.02)
+        return self.now
+
+
+# R9: threads sharing one limiter (FastAPI worker threads) must not both get through.
+def test_two_threads_cannot_both_take_the_last_slot():
+    clock = SlowClock()
+    sleep = FakeSleep(clock)
+    limiter = RateLimiter(1, 30, clock=clock, sleep=sleep)
+    threads = [threading.Thread(target=limiter.acquire) for _ in range(2)]
+
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert sleep.calls == [30]  # the second thread had to wait for the window
 
 # ---------------------------------------------------------------------------
 # with_retries: exponential backoff 1, 2, 4 s on 429 / 5xx / connection errors.
