@@ -250,6 +250,8 @@ From 2.11.0 the same data gives **2.12.4**, because the 2.12 branch fixes for al
 | NVD unknown CVE (`totalResults: 0`) | no enrichment, severity falls back to OSV, no warning |
 | Ecosystem `unknown` / unparsable version | skip the package, warning |
 | Empty extraction | empty result, no network calls |
+| NVD gives up (retries used) | skip NVD for the rest of this request, so a down NVD costs one timeout, not one per CVE |
+| Unparsable version in OSV data (`ValueError`) | skip that vulnerability, warning |
 
 ### 7.3 Severity
 | Score | Label |
@@ -284,7 +286,8 @@ CREATE TABLE IF NOT EXISTS cache (key TEXT PRIMARY KEY, value TEXT NOT NULL, fet
 | `set(key, value)` | stores the JSON with `fetched_at = clock()` (insert or replace) |
 
 Keys: `osv:query:{ecosystem}:{name}:{version or *}`, `osv:vuln:{id}`, `nvd:cve:{id}`, `kev:catalog`.
-Default path: `cache/retrieval.sqlite3`, can be overridden with `CVE_CACHE_PATH`. `cache/` is git-ignored.
+Default path: `cache/retrieval.sqlite3` **resolved from the project root** (not the current working directory),
+can be overridden with `CVE_CACHE_PATH`. `cache/` is git-ignored.
 
 ### 8.2 `cached_fetch(cache, key, fetch) -> (value, is_stale)`
 1. Fresh cache hit → `(value, False)`, no network call.
@@ -294,8 +297,11 @@ Default path: `cache/retrieval.sqlite3`, can be overridden with `CVE_CACHE_PATH`
 
 ### 8.3 `RateLimiter(max_calls, window_seconds, clock, sleep)`
 A sliding window over the timestamps of recent calls. `acquire()` drops timestamps older than the window.
-If `max_calls` are still left, it sleeps until the oldest one expires, then records the new call.
-NVD: `RateLimiter(50, 30)` with a key, `RateLimiter(5, 30)` without one.
+**While** the window is still full it sleeps until the oldest call expires and checks again, then records the new
+call. The loop matters: Windows' monotonic clock ticks every 15.6 ms, so a sleep can appear to end a moment early.
+`acquire()` holds a `threading.Lock`, so one limiter can be shared by FastAPI worker threads. Waiting threads queue
+behind the lock, which is the intended behaviour.
+NVD: `RateLimiter(50, 30)` with a key, `RateLimiter(5, 30)` without one. Create **one** limiter per process and share it.
 
 ### 8.4 `with_retries(call, sleep, retries=3, base_delay=1.0)`
 - Retryable: `requests.ConnectionError`, `requests.Timeout`, HTTP 429, HTTP 5xx.
@@ -362,6 +368,8 @@ Clocks and `sleep` are fakes, so no test actually waits.
 | R5 | `with_retries`: ConnectionError ×4 | `RetrievalError`; sleeps `[1, 2, 4]` | NFR4 |
 | R6 | `with_retries`: 404 | `RetrievalError` straight away, no sleeps | NFR4 |
 | R7 | `with_retries`: 429 then 200 | retried once | NFR4 |
+| R8 | sleep wakes 10 ms early (coarse clock) | sleeps again, 6th call at t ≥ 30 | NFR3 |
+| R9 | two threads share a limit-1 limiter | the second thread waits 30 s | NFR3 |
 
 ### 9.5 `test_osv_client.py`
 | ID | Case | Expect | Req |
@@ -373,6 +381,7 @@ Clocks and `sleep` are fakes, so no test actually waits.
 | O5 | same query twice | one HTTP call (cache hit) | NFR1 |
 | O6 | HTTP fails, stale cache exists | stale data, `is_stale=True` | NFR2 |
 | O7 | `get_vuln("GHSA-jfh8-c2jp-5v3q")` | GET `/v1/vulns/GHSA-jfh8-c2jp-5v3q`, aliases incl. CVE-2021-44228 | FR4 |
+| O8 | response body is not valid JSON | `RetrievalError` (so `cached_fetch` can fall back to stale data) | NFR2 |
 
 ### 9.6 `test_nvd_client.py`
 | ID | Case | Expect | Req |
@@ -386,6 +395,8 @@ Clocks and `sleep` are fakes, so no test actually waits.
 | N7 | `NVD-CWE-noinfo` weakness | filtered out | FR5 |
 | N8 | `totalResults: 0` | `None` | FR5 |
 | N9 | limiter `acquire()` called on each request | yes | NFR3 |
+| N10 | response body is not valid JSON | `RetrievalError` | NFR2 |
+| N11 | HTTP 403 (NVD's rate-limit answer, to confirm with the live test) | retried like 429 | NFR4 |
 
 ### 9.7 `test_kev_client.py`
 | ID | Case | Expect | Req |
@@ -415,6 +426,8 @@ Clocks and `sleep` are fakes, so no test actually waits.
 | S15 | every output ID (`id` + `aliases`) is in the input or in a fake response | True | FR11 |
 | S16 | records sorted by score, highest first, `None` last | True | §4.2 |
 | S17 | `sources` includes the NVD and OSV URLs, plus the KEV URL when `in_kev` | True | §7.4 |
+| S18 | NVD gives up on the first CVE | no further NVD calls in this request; the rest use cache or OSV data, one warning | NFR2 |
+| S19 | OSV entry with an unparsable version | that vuln is skipped with a warning, the rest still returned | §7.2 |
 
 ### 9.9 `tests/integration/test_live.py` (`@pytest.mark.live`, skipped by default)
 | ID | Case | Expect |

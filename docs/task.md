@@ -54,6 +54,8 @@ Mark a box only when its tests are green and committed.
 - [x] Red: cases R4–R7
 - [x] Green: `with_retries()`
 - [x] Refactor (build the HTTP error once, clearer names)
+- [x] Review fix, Red: early wake-up (R8), shared between threads (R9)
+- [x] Review fix, Green: re-check after sleeping (`while`), lock around `acquire()`
 
 ## 5. Fixtures (real API responses, saved once)
 - [ ] `osv_query_log4j_core_2.14.1.json`: OSV query for Maven `org.apache.logging.log4j:log4j-core` 2.14.1
@@ -65,12 +67,12 @@ Mark a box only when its tests are green and committed.
 - [ ] Trim large fields so each file stays readable. Commit: `test: add task 2 API fixtures`
 
 ## 6. OSV client – `osv_client.py`
-- [ ] Red: `test_osv_client.py`, cases O1–O7
+- [ ] Red: `test_osv_client.py`, cases O1–O8 (O8: bad JSON → `RetrievalError`)
 - [ ] Green: `OsvClient.query_package()` (with paging), `OsvClient.get_vuln()`
 - [ ] Refactor
 
 ## 7. NVD client – `nvd_client.py`
-- [ ] Red: `test_nvd_client.py`, cases N1–N9
+- [ ] Red: `test_nvd_client.py`, cases N1–N11 (N10: bad JSON; N11: confirm NVD's 403 rate-limit answer, retry it)
 - [ ] Green: `NvdClient.get_cve()` → `NvdCve(id, summary, cvss_score, cwes)`
 - [ ] Refactor
 
@@ -84,13 +86,13 @@ Mark a box only when its tests are green and committed.
 - [ ] Green: package flow, NVD/KEV enrichment, severity, sources, upgrades, sorting
 - [ ] Red: matching and keys, cases S4–S10
 - [ ] Green: version double-check, advisory and CVE inputs, merge/de-duplicate
-- [ ] Red: failures and edge cases, cases S11–S15
+- [ ] Red: failures and edge cases, cases S11–S15, S18 (stop calling NVD after it gives up), S19 (unparsable version)
 - [ ] Green: stale/missing data warnings, skips, empty input, FR11 check
 - [ ] Refactor: keep `retrieve()` a short list of named steps
 
 ## 10. Entry point – `src/retrieval/__init__.py`
 - [ ] Red: `retrieve()` builds the real clients (check the wiring with a fake session, no network)
-- [ ] Green: read `.env` (`NVD_API_KEY`, `CVE_CACHE_PATH`), build cache, limiter and clients, call the service
+- [ ] Green: read `.env` (`NVD_API_KEY`, `CVE_CACHE_PATH`), build cache, limiter and clients, call the service. One shared NVD limiter per process; default cache path resolved from the project root
 - [ ] Refactor
 
 ## 11. Live checks and demo prep
@@ -112,9 +114,9 @@ Mark a box only when its tests are green and committed.
 | models | M1–M5 | ☑ 24 passing |
 | version_matcher | V1–V16 | ☑ 34 passing |
 | cache | C1–C8 | ☑ 10 passing |
-| rate_limiter | R1–R7 | ☑ 10 passing |
-| osv_client | O1–O7 | ☐ |
-| nvd_client | N1–N9 | ☐ |
+| rate_limiter | R1–R9 | ☑ 12 passing |
+| osv_client | O1–O8 | ☐ |
+| nvd_client | N1–N11 | ☐ |
 | kev_client | K1–K4 | ☐ |
-| vulnerability_service | S1–S17 | ☐ |
+| vulnerability_service | S1–S19 | ☐ |
 | live | L1–L2 | ☐ |
