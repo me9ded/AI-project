@@ -38,3 +38,7 @@ class RateLimiter:
         now = self.clock()
         while self._recent_calls and now - self._recent_calls[0] >= self.window_seconds:
             self._recent_calls.popleft()
+
+
+def with_retries(call, sleep=time.sleep, retries=3, base_delay=1.0):
+    raise NotImplementedError

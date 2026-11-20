@@ -1,7 +1,10 @@
 """Tests for src/retrieval/rate_limiter.py (design spec section 8.3-8.4, test IDs R1-R7)."""
 
-from src.retrieval.rate_limiter import RateLimiter
-from tests.unit.fakes import FakeClock, FakeSleep
+import pytest
+import requests
+
+from src.retrieval.rate_limiter import RateLimiter, RetrievalError, with_retries
+from tests.unit.fakes import FakeClock, FakeResponse, FakeSession, FakeSleep
 
 
 def make_limiter(max_calls=5, window_seconds=30, start=0.0):
@@ -59,3 +62,82 @@ def test_window_slides_with_each_call():
 
     assert sleep.calls == [15]
     assert clock() == 30
+
+
+# ---------------------------------------------------------------------------
+# with_retries: exponential backoff 1, 2, 4 s on 429 / 5xx / connection errors.
+# ---------------------------------------------------------------------------
+
+URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
+
+
+def run_with_retries(responses):
+    session = FakeSession(responses)
+    sleep = FakeSleep()
+    result = with_retries(lambda: session.get(URL, timeout=10), sleep=sleep)
+    return result, session, sleep
+
+
+# R4: temporary server errors are retried; the first good response is returned.
+def test_retries_server_errors_then_returns_success():
+    ok = FakeResponse(200, {"totalResults": 1})
+
+    result, session, sleep = run_with_retries([FakeResponse(503), FakeResponse(503), ok])
+
+    assert result is ok
+    assert len(session.calls) == 3
+    assert sleep.calls == [1, 2]
+
+
+# R5: still failing after 3 retries -> RetrievalError, with the cause kept.
+def test_gives_up_after_three_retries():
+    session = FakeSession([requests.ConnectionError("offline")] * 4)
+    sleep = FakeSleep()
+
+    with pytest.raises(RetrievalError) as error:
+        with_retries(lambda: session.get(URL, timeout=10), sleep=sleep)
+
+    assert len(session.calls) == 4
+    assert sleep.calls == [1, 2, 4]
+    assert isinstance(error.value.__cause__, requests.ConnectionError)
+
+
+def test_timeouts_are_retried():
+    ok = FakeResponse(200)
+
+    result, _, sleep = run_with_retries([requests.Timeout("slow"), ok])
+
+    assert result is ok
+    assert sleep.calls == [1]
+
+
+# R6: other 4xx errors will not get better by retrying.
+def test_client_error_is_not_retried():
+    session = FakeSession([FakeResponse(404)])
+    sleep = FakeSleep()
+
+    with pytest.raises(RetrievalError):
+        with_retries(lambda: session.get(URL, timeout=10), sleep=sleep)
+
+    assert len(session.calls) == 1
+    assert sleep.calls == []
+
+
+# R7: 429 Too Many Requests is retried.
+def test_too_many_requests_is_retried():
+    ok = FakeResponse(200)
+
+    result, session, sleep = run_with_retries([FakeResponse(429), ok])
+
+    assert result is ok
+    assert len(session.calls) == 2
+    assert sleep.calls == [1]
+
+
+def test_success_on_first_try_does_not_sleep():
+    ok = FakeResponse(200)
+
+    result, session, sleep = run_with_retries([ok])
+
+    assert result is ok
+    assert sleep.calls == []
