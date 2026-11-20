@@ -11,12 +11,20 @@ LOG4J_CORE = "org.apache.logging.log4j:log4j-core"
 LOG4J_CVES = {"CVE-2021-44228", "CVE-2021-45046", "CVE-2021-45105", "CVE-2021-44832"}
 
 
-def log4j_core_entry(vuln):
-    """The `affected` entry for log4j-core in one OSV vuln."""
-    return next(
+def package_entry(vuln, name, ecosystem):
+    """All of a package's `affected` entries in one OSV vuln, merged into one.
+
+    Real OSV data often splits a package into one entry per release branch
+    (CVE-2021-44228 has three for log4j-core), so the ranges must be combined.
+    """
+    entries = [
         entry for entry in vuln["affected"]
-        if entry["package"]["ecosystem"] == "Maven" and entry["package"]["name"] == LOG4J_CORE
-    )
+        if entry["package"]["ecosystem"] == ecosystem and entry["package"]["name"].lower() == name.lower()
+    ]
+    return {
+        "ranges": [r for entry in entries for r in entry.get("ranges", [])],
+        "versions": [v for entry in entries for v in entry.get("versions", [])],
+    }
 
 
 def log4j_vulns():
@@ -27,6 +35,14 @@ def log4j_vulns():
 
 # --- OSV ------------------------------------------------------------------
 
+def test_osv_log4j_splits_a_package_into_several_entries():
+    """Documents the real-data shape the service must handle (spec 7.1)."""
+    log4shell = next(v for v in log4j_vulns() if "CVE-2021-44228" in v["aliases"])
+    log4j_core_entries = [a for a in log4shell["affected"] if a["package"]["name"] == LOG4J_CORE]
+
+    assert len(log4j_core_entries) > 1
+
+
 def test_osv_log4j_query_contains_all_four_demo_cves():
     vulns = load_fixture("osv_query_log4j_core_2.14.1.json")["vulns"]
     aliases = {alias for vuln in vulns for alias in vuln.get("aliases", [])}
@@ -36,7 +52,7 @@ def test_osv_log4j_query_contains_all_four_demo_cves():
 
 def test_real_osv_data_marks_2_14_1_affected_and_fixed_in_2_17_1():
     vulns = log4j_vulns()
-    entries = [log4j_core_entry(vuln) for vuln in vulns]
+    entries = [package_entry(vuln, LOG4J_CORE, "Maven") for vuln in vulns]
 
     assert len(entries) == 4
     assert all(is_affected("2.14.1", entry, "Maven") for entry in entries)
@@ -56,9 +72,7 @@ def test_osv_jinja2_query_has_affected_pypi_vulns():
 
     assert vulns
     for vuln in vulns:
-        entry = next(e for e in vuln["affected"] if e["package"]["name"].lower() == "jinja2")
-        assert entry["package"]["ecosystem"] == "PyPI"
-        assert is_affected("2.10", entry, "PyPI")
+        assert is_affected("2.10", package_entry(vuln, "jinja2", "PyPI"), "PyPI")
 
 
 # --- NVD ------------------------------------------------------------------
