@@ -4,6 +4,9 @@ They replace the network (requests.Session), the clock and time.sleep, so unit t
 run fast, never touch the internet and never really wait.
 """
 
+import json
+from pathlib import Path
+
 import requests
 
 
@@ -78,3 +81,12 @@ class FakeSleep:
         self.calls.append(seconds)
         if self.clock is not None:
             self.clock.advance(seconds)
+
+
+FIXTURES_DIR = Path(__file__).resolve().parent.parent / "fixtures" / "t2"
+
+
+def load_fixture(name):
+    """Load a saved API response from tests/fixtures/t2/."""
+    with open(FIXTURES_DIR / name, encoding="utf-8") as file:
+        return json.load(file)
