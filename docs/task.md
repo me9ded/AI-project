@@ -18,8 +18,8 @@ Mark a box only when its tests are green and committed.
 - [x] Create the `brian` branch
 - [x] Write the design spec (`docs/task2-design-spec.md`)
 - [x] Write this task list
-- [ ] Add `requirements.txt` (`requests`, `pydantic>=2`, `packaging`, `python-dotenv`, `pytest`)
-- [ ] Add `pytest.ini` (`pythonpath = .`, `live` marker, `addopts = -m "not live"`)
+- [x] Add `requirements.txt` (`requests`, `pydantic>=2`, `packaging`, `python-dotenv`, `pytest`)
+- [x] Add `pytest.ini` (`pythonpath = .`, `live` marker, `addopts = -m "not live"`)
 - [ ] Add `.gitignore` (`.env`, `cache/`, `__pycache__/`, `.pytest_cache/`) and `.env.example`
 - [ ] Create the empty packages `src/__init__.py`, `src/retrieval/__init__.py` and the folders `tests/unit/`, `tests/fixtures/t2/`
 - [ ] Add `tests/unit/fakes.py` with `FakeSession`, `FakeResponse`, `FakeClock` and a fake `sleep` that records its calls
