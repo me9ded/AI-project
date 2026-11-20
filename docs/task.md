@@ -26,7 +26,7 @@ Mark a box only when its tests are green and committed.
 - [x] Commit: `chore: project scaffold for task 2`
 
 ## 1. Models – `vulnerability_models.py`
-- [ ] Red: `test_vulnerability_models.py`, cases M1–M5
+- [x] Red: `test_vulnerability_models.py`, cases M1–M5
 - [ ] Green: `Severity`, `severity_from_score()`, `severity_from_label()`, `VulnerabilityRecord`, `RetrievalResult`
 - [ ] Refactor
 
