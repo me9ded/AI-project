@@ -21,9 +21,9 @@ Mark a box only when its tests are green and committed.
 - [x] Add `requirements.txt` (`requests`, `pydantic>=2`, `packaging`, `python-dotenv`, `pytest`)
 - [x] Add `pytest.ini` (`pythonpath = .`, `live` marker, `addopts = -m "not live"`)
 - [x] Add `.gitignore` (`.env`, `cache/`, `__pycache__/`, `.pytest_cache/`) and `.env.example`
-- [ ] Create the empty packages `src/__init__.py`, `src/retrieval/__init__.py` and the folders `tests/unit/`, `tests/fixtures/t2/`
-- [ ] Add `tests/unit/fakes.py` with `FakeSession`, `FakeResponse`, `FakeClock` and a fake `sleep` that records its calls
-- [ ] Commit: `chore: project scaffold for task 2`
+- [x] Create the empty packages `src/__init__.py`, `src/retrieval/__init__.py` and the folders `tests/unit/`, `tests/fixtures/t2/`
+- [x] Add `tests/unit/fakes.py` with `FakeSession`, `FakeResponse`, `FakeClock` and a fake `sleep` that records its calls
+- [x] Commit: `chore: project scaffold for task 2`
 
 ## 1. Models – `vulnerability_models.py`
 - [ ] Red: `test_vulnerability_models.py`, cases M1–M5
