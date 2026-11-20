@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.retrieval.version_matcher import is_affected, parse_version
+from src.retrieval.version_matcher import fixed_versions, is_affected, lowest_fix, parse_version
 
 
 # ---------------------------------------------------------------------------
@@ -160,3 +160,49 @@ def test_git_ranges_are_ignored():
     entry = make_entry(("GIT", [{"introduced": "0"}, {"fixed": "a1b2c3d4"}]))
 
     assert is_affected("1.0", entry, "PyPI") is False
+
+
+# ---------------------------------------------------------------------------
+# Fixes: fixed_versions() and lowest_fix() (design spec section 6.3).
+# ---------------------------------------------------------------------------
+
+# V14: every `fixed` event value from version ranges, without duplicates or GIT hashes.
+def test_fixed_versions_collects_fixed_events():
+    entry = make_entry(
+        ("ECOSYSTEM", [{"introduced": "2.0-beta9"}, {"fixed": "2.3.1"}, {"introduced": "2.4"}, {"fixed": "2.12.2"}]),
+        ("ECOSYSTEM", [{"introduced": "2.13.0"}, {"fixed": "2.15.0"}]),
+        ("ECOSYSTEM", [{"introduced": "2.13.0"}, {"fixed": "2.15.0"}]),
+        ("GIT", [{"introduced": "0"}, {"fixed": "a1b2c3d4"}]),
+    )
+
+    assert fixed_versions(entry) == ["2.3.1", "2.12.2", "2.15.0"]
+
+
+def test_fixed_versions_empty_when_no_fix():
+    entry = make_entry(("ECOSYSTEM", [{"introduced": "0"}]))
+
+    assert fixed_versions(entry) == []
+
+
+# V12: the Log4j worked example - backports below 2.14.1 are skipped, the answer is 2.17.1.
+def test_lowest_fix_for_log4j_example():
+    fixed_lists = [
+        ["2.3.1", "2.12.2", "2.15.0"],   # CVE-2021-44228
+        ["2.3.1", "2.12.2", "2.16.0"],   # CVE-2021-45046
+        ["2.3.1", "2.12.3", "2.17.0"],   # CVE-2021-45105
+        ["2.3.2", "2.12.4", "2.17.1"],   # CVE-2021-44832
+    ]
+
+    assert lowest_fix("2.14.1", fixed_lists, "Maven") == "2.17.1"
+
+
+def test_lowest_fix_ignores_vulns_without_a_fix_above_installed():
+    fixed_lists = [["2.10.1"], []]
+
+    assert lowest_fix("2.10", fixed_lists, "PyPI") == "2.10.1"
+
+
+# V13: nothing fixes anything above the installed version -> None.
+def test_lowest_fix_is_none_when_no_fix_exists():
+    assert lowest_fix("3.0", [["1.0"], []], "PyPI") is None
+    assert lowest_fix("3.0", [], "PyPI") is None

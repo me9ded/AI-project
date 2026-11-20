@@ -35,7 +35,7 @@ Mark a box only when its tests are green and committed.
 - [x] Green: `parse_version()` for PyPI, npm and Maven
 - [x] Red: ranges, cases V2, V3, V5, V7–V11
 - [x] Green: `is_affected()`
-- [ ] Red: fixes, cases V12–V14
+- [x] Red: fixes, cases V12–V14
 - [ ] Green: `fixed_versions()`, `lowest_fix()`
 - [ ] Refactor
 
