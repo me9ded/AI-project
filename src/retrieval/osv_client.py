@@ -30,10 +30,18 @@ class OsvClient:
         key = f"osv:query:{ecosystem}:{name}:{version or '*'}"
 
         def fetch():
-            response = with_retries(
-                lambda: self.session.post(QUERY_URL, json=body, timeout=TIMEOUT_SECONDS), sleep=self.sleep
-            )
-            return {"vulns": response.json().get("vulns", [])}
+            vulns = []
+            page_body = body
+            while True:  # OSV pages long results; follow next_page_token until it is gone
+                response = with_retries(
+                    lambda: self.session.post(QUERY_URL, json=page_body, timeout=TIMEOUT_SECONDS), sleep=self.sleep
+                )
+                page = response.json()
+                vulns.extend(page.get("vulns", []))
+                token = page.get("next_page_token")
+                if not token:
+                    return {"vulns": vulns}
+                page_body = {**body, "page_token": token}
 
         data, is_stale = cached_fetch(self.cache, key, fetch)
         return data["vulns"], is_stale
