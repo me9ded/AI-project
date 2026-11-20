@@ -11,7 +11,15 @@ _RETRYABLE_EXCEPTIONS = (requests.ConnectionError, requests.Timeout)
 
 
 class RetrievalError(Exception):
-    """An external API could not be reached or answered with an error."""
+    """An external API could not be reached or answered with an error.
+
+    `status_code` is the HTTP status when the API answered (e.g. 404), or None
+    when it could not be reached at all.
+    """
+
+    def __init__(self, message: str, status_code: int | None = None):
+        super().__init__(message)
+        self.status_code = status_code
 
 
 class RateLimiter:
@@ -61,14 +69,15 @@ def with_retries(call, sleep=time.sleep, retries: int = 3, base_delay: float = 1
         else:
             if response.status_code < 400:
                 return response
-            last_problem = RetrievalError(f"HTTP {response.status_code}")
+            last_problem = RetrievalError(f"HTTP {response.status_code}", response.status_code)
             if not _is_retryable_status(response.status_code):
                 raise last_problem
 
         if attempt < retries:
             sleep(base_delay * 2 ** attempt)
 
-    raise RetrievalError(f"Gave up after {retries} retries: {last_problem}") from last_problem
+    status_code = getattr(last_problem, "status_code", None)  # None for network errors
+    raise RetrievalError(f"Gave up after {retries} retries: {last_problem}", status_code) from last_problem
 
 
 def _is_retryable_status(status_code: int) -> bool:
