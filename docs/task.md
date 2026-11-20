@@ -37,7 +37,7 @@ Mark a box only when its tests are green and committed.
 - [x] Green: `is_affected()`
 - [x] Red: fixes, cases V12–V14
 - [x] Green: `fixed_versions()`, `lowest_fix()`
-- [ ] Refactor
+- [x] Refactor (shared range filter and sort key)
 
 ## 3. Cache – `cache.py`
 - [ ] Red: `test_cache.py`, cases C1–C4
@@ -108,7 +108,7 @@ Mark a box only when its tests are green and committed.
 | Module | Tests | Status |
 |--------|-------|--------|
 | models | M1–M5 | ☑ 24 passing |
-| version_matcher | V1–V14 | ☐ |
+| version_matcher | V1–V14 | ☑ 30 passing |
 | cache | C1–C8 | ☐ |
 | rate_limiter | R1–R7 | ☐ |
 | osv_client | O1–O7 | ☐ |

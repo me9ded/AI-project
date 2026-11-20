@@ -52,12 +52,17 @@ def is_affected(version: str, affected_entry: dict, ecosystem: str) -> bool:
         return True
 
     parsed = parse_version(version, ecosystem)
-    for version_range in affected_entry.get("ranges", []):
-        if version_range.get("type") not in ("ECOSYSTEM", "SEMVER"):
-            continue  # GIT ranges use commit hashes, not versions
-        if _in_range(parsed, version_range.get("events", []), ecosystem):
-            return True
-    return False
+    return any(_in_range(parsed, events, ecosystem) for events in _version_range_events(affected_entry))
+
+
+def _version_range_events(affected_entry: dict) -> list[list[dict]]:
+    """Event lists of the entry's ECOSYSTEM/SEMVER ranges. GIT ranges use commit
+    hashes, not versions, so they are skipped."""
+    return [
+        version_range.get("events", [])
+        for version_range in affected_entry.get("ranges", [])
+        if version_range.get("type") in ("ECOSYSTEM", "SEMVER")
+    ]
 
 
 def _in_range(parsed, events: list[dict], ecosystem: str) -> bool:
@@ -86,10 +91,8 @@ def _at_or_after(parsed, start: str, ecosystem: str) -> bool:
 def fixed_versions(affected_entry: dict) -> list[str]:
     """Every `fixed` version in the entry's version ranges, in order, without duplicates."""
     found = []
-    for version_range in affected_entry.get("ranges", []):
-        if version_range.get("type") not in ("ECOSYSTEM", "SEMVER"):
-            continue
-        for event in version_range.get("events", []):
+    for events in _version_range_events(affected_entry):
+        for event in events:
             fixed = event.get("fixed")
             if fixed is not None and fixed not in found:
                 found.append(fixed)
@@ -103,12 +106,15 @@ def lowest_fix(installed: str, fixed_lists: list[list[str]], ecosystem: str) -> 
     (this skips backport branches), then return the largest of those.
     Vulnerabilities with no fix above the installed version are left out.
     """
-    current = parse_version(installed, ecosystem)
+    def version_key(version: str):
+        return parse_version(version, ecosystem)
+
+    current = version_key(installed)
     needed = []
     for fixes in fixed_lists:
-        upgrades = [fix for fix in fixes if parse_version(fix, ecosystem) > current]
+        upgrades = [fix for fix in fixes if version_key(fix) > current]
         if upgrades:
-            needed.append(min(upgrades, key=lambda fix: parse_version(fix, ecosystem)))
+            needed.append(min(upgrades, key=version_key))
     if not needed:
         return None
-    return max(needed, key=lambda fix: parse_version(fix, ecosystem))
+    return max(needed, key=version_key)
