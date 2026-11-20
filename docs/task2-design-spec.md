@@ -43,7 +43,7 @@ NVD CPE configuration matching (OSV ranges are more precise for packages), and a
 | FR2 | For every package that has a version, query OSV and keep only the vulnerabilities whose ranges include that version. |
 | FR3 | For a package with `version: null` (for example npm audit without a lockfile), query OSV by package only and mark each record `affected = None` ("version unknown"). |
 | FR4 | Resolve every `advisory_id` (GHSA-…, PYSEC-…) through OSV to its CVE aliases. |
-| FR5 | Enrich every CVE ID, whether found through OSV or given in `cve_ids`, from NVD: CVSS base score, CWE IDs and English description. |
+| FR5 | Enrich every CVE ID, whether found through OSV or given in `cve_ids`, from NVD: CVSS base score, CWE IDs and English description. Score order: v3.1 → v4.0 → v3.0 → v2 (first one present wins; v4.0 uses the same rating bands). |
 | FR6 | Set `in_kev = True` for every CVE listed in the CISA KEV catalog. |
 | FR7 | Version matcher: decide whether a version is inside OSV `ECOSYSTEM`/`SEMVER` ranges for PyPI, npm and Maven (section 6). |
 | FR8 | For each package, work out the lowest version that fixes **all** of its known vulnerabilities (demo: log4j-core 2.14.1 → 2.17.1). |
@@ -169,7 +169,7 @@ class RetrievalResult(BaseModel):
 |--------|------|-------------|
 | **OSV query** | `POST https://api.osv.dev/v1/query` body `{"package": {"name", "ecosystem"}, "version"}` (`version` omitted when null) | `vulns[]`, `next_page_token` |
 | **OSV vuln** | `GET https://api.osv.dev/v1/vulns/{id}` | `id`, `aliases`, `summary`, `details`, `affected[].package`, `affected[].ranges[].{type, events}`, `affected[].versions`, `database_specific.severity`, `database_specific.cwe_ids` |
-| **NVD CVE** | `GET https://services.nvd.nist.gov/rest/json/cves/2.0?cveId={id}`, header `apiKey` when set | `vulnerabilities[0].cve.descriptions[lang=en]`, `metrics.cvssMetricV31 / V30 / V2[].cvssData.baseScore` (prefer `type: "Primary"`), `weaknesses[].description[].value` |
+| **NVD CVE** | `GET https://services.nvd.nist.gov/rest/json/cves/2.0?cveId={id}`, header `apiKey` when set | `vulnerabilities[0].cve.descriptions[lang=en]`, `metrics.cvssMetricV31 / V40 / V30 / V2[].cvssData.baseScore` in that order (prefer `type: "Primary"`; ignore other keys such as `ssvcV203`), `weaknesses[].description[].value` |
 | **CISA KEV** | `GET https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json` | `vulnerabilities[].cveID` |
 
 Notes
@@ -229,9 +229,11 @@ From 2.11.0 the same data gives **2.12.4**, because the 2.12 branch fixes for al
 
 ### 7.1 Steps
 1. **Packages.** For each package with a known ecosystem, call `osv.query_package(name, ecosystem, version)`.
-   For each OSV vuln, take **all** `affected` entries for this package (same ecosystem, name compared
-   case-insensitively) and merge their `ranges` and `versions` into one entry. Real OSV data splits a package
-   into one entry per release branch (CVE-2021-44228 has three for log4j-core). Then:
+   For each OSV vuln, take **all** `affected` entries for this package (same ecosystem, same normalised name)
+   and merge their `ranges` and `versions` into one entry. Real OSV data splits a package
+   into one entry per release branch (CVE-2021-44228 has three for log4j-core).
+   Name normalisation: **PyPI** follows PEP 503 (lower-case, runs of `-`, `_`, `.` become one `-`, so
+   `Zope.Interface`, `zope_interface` and `zope-interface` match); **npm** and **Maven** compare lower-case. Then:
    - if there is a version, call `is_affected()`. Drop the vuln if the answer is False; this double-checks OSV.
    - if there is no version, set `affected = None`.
    - collect `fixed_versions` from that entry's `fixed` events.
@@ -392,6 +394,7 @@ Clocks and `sleep` are fakes, so no test actually waits.
 | N2 | no key | no `apiKey` header | NFR3 |
 | N3 | CVE-2021-44228 fixture | score 10.0, `cwes` contains `CWE-502`, English summary | FR5 |
 | N12 | fixture's non-CVSS `ssvcV203` metric | ignored, score still 10.0 | FR5 |
+| N13 | metrics with `cvssMetricV40` only, and with V40 + V30 | V40 score used in both | FR5 |
 | N4 | metrics only V30 / only V2 | V30 / V2 score used | FR5 |
 | N5 | Primary and Secondary V31 metrics | Primary used | FR5 |
 | N6 | no metrics | score `None` | FR5/FR10 |
@@ -429,6 +432,7 @@ Clocks and `sleep` are fakes, so no test actually waits.
 | S15 | every output ID (`id` + `aliases`) is in the input or in a fake response | True | FR11 |
 | S16 | records sorted by score, highest first, `None` last | True | §4.2 |
 | S20 | one vuln with several `affected` entries for the package (per-branch) | entries merged; 2.14.1 matched by the third entry | FR2 |
+| S21 | extraction names `Zope.Interface` (PyPI), OSV entry names `zope-interface` | entry matched (PEP 503 normalisation) | FR2 |
 | S17 | `sources` includes the NVD and OSV URLs, plus the KEV URL when `in_kev` | True | §7.4 |
 | S18 | NVD gives up on the first CVE | no further NVD calls in this request; the rest use cache or OSV data, one warning | NFR2 |
 | S19 | OSV entry with an unparsable version | that vuln is skipped with a warning, the rest still returned | §7.2 |

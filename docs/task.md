@@ -65,7 +65,9 @@ Mark a box only when its tests are green and committed.
 - [x] `nvd_not_found.json`: NVD response with `totalResults: 0`
 - [x] `kev_excerpt.json`: KEV feed trimmed to a few entries, including CVE-2021-44228
 - [x] Trim large fields so each file stays readable; sources and trimming rules in `tests/fixtures/t2/README.md`
-- [x] Red/Green: `test_fixtures.py` sanity checks (8 tests), incl. real OSV data → 2.14.1 affected, 2.17.1 fixes the 4 demo CVEs
+- [x] Red/Green: `test_fixtures.py` sanity checks (9 tests), incl. real OSV data → 2.14.1 affected, 2.17.1 fixes the 4 demo CVEs, 2.25.4 fixes all 8
+- [x] Review fix: `scripts/refresh_fixtures.py` (download + trim, 5 tests); reproduces the committed fixtures exactly
+- [ ] Service (Task 9): switch `test_fixtures.py`'s `package_entry` helper to the service's merge helper so there is one version
 
 ## 6. OSV client – `osv_client.py`
 - [ ] Red: `test_osv_client.py`, cases O1–O8 (O8: bad JSON → `RetrievalError`)
@@ -73,7 +75,7 @@ Mark a box only when its tests are green and committed.
 - [ ] Refactor
 
 ## 7. NVD client – `nvd_client.py`
-- [ ] Red: `test_nvd_client.py`, cases N1–N12 (N10: bad JSON; N12: ignore non-CVSS metrics; N11: confirm NVD's 403 rate-limit answer, retry it)
+- [ ] Red: `test_nvd_client.py`, cases N1–N13 (N10: bad JSON; N12: ignore non-CVSS metrics; N13: CVSS v4.0 between v3.1 and v3.0; N11: confirm NVD's 403 rate-limit answer, retry it)
 - [ ] Green: `NvdClient.get_cve()` → `NvdCve(id, summary, cvss_score, cwes)`
 - [ ] Refactor
 
@@ -83,7 +85,7 @@ Mark a box only when its tests are green and committed.
 - [ ] Refactor
 
 ## 9. Service – `vulnerability_service.py`
-- [ ] Red: happy path, cases S1–S3, S16, S17, S20 (Log4Shell from the real fixture: 8 vulns, upgrade 2.25.4; merge per-branch entries)
+- [ ] Red: happy path, cases S1–S3, S16, S17, S20, S21 (Log4Shell from the real fixture: 8 vulns, upgrade 2.25.4; merge per-branch entries; PEP 503 names for PyPI)
 - [ ] Green: package flow, NVD/KEV enrichment, severity, sources, upgrades, sorting
 - [ ] Red: matching and keys, cases S4–S10
 - [ ] Green: version double-check, advisory and CVE inputs, merge/de-duplicate
@@ -117,8 +119,8 @@ Mark a box only when its tests are green and committed.
 | cache | C1–C8 | ☑ 10 passing |
 | rate_limiter | R1–R9 | ☑ 12 passing |
 | osv_client | O1–O8 | ☐ |
-| nvd_client | N1–N12 | ☐ |
+| nvd_client | N1–N13 | ☐ |
 | kev_client | K1–K4 | ☐ |
-| vulnerability_service | S1–S20 | ☐ |
-| fixtures | sanity | ☑ 8 passing |
+| vulnerability_service | S1–S21 | ☐ |
+| fixtures | sanity + refresh script | ☑ 14 passing |
 | live | L1–L2 | ☐ |
