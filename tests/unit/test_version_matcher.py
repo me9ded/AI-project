@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.retrieval.version_matcher import parse_version
+from src.retrieval.version_matcher import is_affected, parse_version
 
 
 # ---------------------------------------------------------------------------
@@ -61,3 +61,102 @@ def test_non_numeric_version_raises_value_error(ecosystem):
 def test_unknown_ecosystem_raises_value_error():
     with pytest.raises(ValueError):
         parse_version("1.0", "unknown")
+
+
+# ---------------------------------------------------------------------------
+# Ranges: is_affected() reads an OSV "affected" entry (ranges + explicit versions).
+# ---------------------------------------------------------------------------
+
+def make_entry(*ranges, versions=None):
+    """Build an OSV 'affected' entry from (type, events) pairs."""
+    return {
+        "ranges": [{"type": range_type, "events": events} for range_type, events in ranges],
+        "versions": versions or [],
+    }
+
+
+# V2: PyPI jinja2-style range [0, 2.10.1).
+def test_pypi_version_inside_fixed_range_is_affected():
+    entry = make_entry(("ECOSYSTEM", [{"introduced": "0"}, {"fixed": "2.10.1"}]))
+
+    assert is_affected("2.10", entry, "PyPI") is True
+    assert is_affected("2.10.1", entry, "PyPI") is False
+
+
+# V3: Maven log4j-core-style range [2.0-beta9, 2.15.0).
+@pytest.mark.parametrize(
+    "version, expected",
+    [
+        ("1.2.17", False),     # before introduced
+        ("2.0-beta9", True),   # introduced version itself is affected
+        ("2.14.1", True),
+        ("2.15.0", False),     # fixed version is not affected
+        ("2.17.1", False),
+    ],
+)
+def test_maven_range_from_prerelease_to_fix(version, expected):
+    entry = make_entry(("ECOSYSTEM", [{"introduced": "2.0-beta9"}, {"fixed": "2.15.0"}]))
+
+    assert is_affected(version, entry, "Maven") is expected
+
+
+# V5: npm lodash-style SEMVER range [0, 4.17.21).
+def test_npm_semver_range():
+    entry = make_entry(("SEMVER", [{"introduced": "0"}, {"fixed": "4.17.21"}]))
+
+    assert is_affected("4.17.15", entry, "npm") is True
+    assert is_affected("4.17.21", entry, "npm") is False
+
+
+# V7: last_affected closes the interval *including* that version.
+def test_last_affected_is_inclusive():
+    entry = make_entry(("ECOSYSTEM", [{"introduced": "1.0"}, {"last_affected": "1.5"}]))
+
+    assert is_affected("1.5", entry, "PyPI") is True
+    assert is_affected("1.6", entry, "PyPI") is False
+
+
+# V8: explicit versions list, no ranges.
+def test_explicit_versions_list():
+    entry = make_entry(versions=["1.2.3"])
+
+    assert is_affected("1.2.3", entry, "npm") is True
+    assert is_affected("1.2.4", entry, "npm") is False
+
+
+# V9: an interval that is never closed means every later version is affected.
+def test_open_ended_range_affects_all_later_versions():
+    entry = make_entry(("ECOSYSTEM", [{"introduced": "3.0"}]))
+
+    assert is_affected("2.9", entry, "PyPI") is False
+    assert is_affected("3.0", entry, "PyPI") is True
+    assert is_affected("99.0", entry, "PyPI") is True
+
+
+# V10: several intervals in one range, and several ranges in one entry.
+def test_multiple_intervals():
+    entry = make_entry(
+        ("ECOSYSTEM", [{"introduced": "1.0"}, {"fixed": "1.5"}, {"introduced": "2.0"}, {"fixed": "2.5"}])
+    )
+
+    assert is_affected("1.2", entry, "PyPI") is True
+    assert is_affected("1.7", entry, "PyPI") is False
+    assert is_affected("2.1", entry, "PyPI") is True
+    assert is_affected("2.5", entry, "PyPI") is False
+
+
+def test_multiple_ranges():
+    entry = make_entry(
+        ("ECOSYSTEM", [{"introduced": "1.0"}, {"fixed": "1.5"}]),
+        ("ECOSYSTEM", [{"introduced": "2.0"}, {"fixed": "2.5"}]),
+    )
+
+    assert is_affected("1.7", entry, "PyPI") is False
+    assert is_affected("2.1", entry, "PyPI") is True
+
+
+# V11: GIT ranges use commit hashes, not versions, so they are ignored.
+def test_git_ranges_are_ignored():
+    entry = make_entry(("GIT", [{"introduced": "0"}, {"fixed": "a1b2c3d4"}]))
+
+    assert is_affected("1.0", entry, "PyPI") is False
