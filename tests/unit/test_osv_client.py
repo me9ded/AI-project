@@ -104,3 +104,17 @@ def test_get_vuln_uses_cache(tmp_path):
     client.get_vuln("GHSA-jfh8-c2jp-5v3q")
 
     assert len(session.calls) == 1
+
+
+# O4: OSV pages long results; follow next_page_token until it is gone.
+def test_query_package_follows_page_tokens(tmp_path):
+    page_1 = {"vulns": [{"id": "GHSA-0001", "aliases": []}], "next_page_token": "abc"}
+    page_2 = {"vulns": [{"id": "GHSA-0002", "aliases": []}]}
+    client, session, _ = make_client(tmp_path, [FakeResponse(200, page_1), FakeResponse(200, page_2)])
+
+    vulns, _ = client.query_package("jinja2", "PyPI", "2.10")
+
+    assert [vuln["id"] for vuln in vulns] == ["GHSA-0001", "GHSA-0002"]
+    assert "page_token" not in session.calls[0]["json"]
+    assert session.calls[1]["json"]["page_token"] == "abc"
+    assert session.calls[1]["json"]["package"] == {"name": "jinja2", "ecosystem": "PyPI"}
