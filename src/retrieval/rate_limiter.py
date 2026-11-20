@@ -1,10 +1,13 @@
 """Rate limiting, retries and the shared retrieval error (design spec section 8.3-8.4).
-
-with_retries() is added in the next step.
 """
 
 import time
 from collections import deque
+
+import requests
+
+# Failures that are worth trying again: the network or the server, not our request.
+_RETRYABLE_EXCEPTIONS = (requests.ConnectionError, requests.Timeout)
 
 
 class RetrievalError(Exception):
@@ -40,5 +43,29 @@ class RateLimiter:
             self._recent_calls.popleft()
 
 
-def with_retries(call, sleep=time.sleep, retries=3, base_delay=1.0):
-    raise NotImplementedError
+def with_retries(call, sleep=time.sleep, retries: int = 3, base_delay: float = 1.0):
+    """Run `call()` (an HTTP request) and return its response, retrying when it may help.
+
+    Retried: connection errors, timeouts, HTTP 429 and HTTP 5xx, waiting 1, 2, 4 s.
+    Any other 4xx, or still failing after `retries` retries -> RetrievalError.
+    """
+    for attempt in range(retries + 1):
+        try:
+            response = call()
+        except _RETRYABLE_EXCEPTIONS as error:
+            problem = error
+        else:
+            if response.status_code < 400:
+                return response
+            if not _is_retryable_status(response.status_code):
+                raise RetrievalError(f"HTTP {response.status_code}")
+            problem = RetrievalError(f"HTTP {response.status_code}")
+
+        if attempt < retries:
+            sleep(base_delay * 2 ** attempt)
+
+    raise RetrievalError(f"Gave up after {retries} retries: {problem}") from problem
+
+
+def _is_retryable_status(status_code: int) -> bool:
+    return status_code == 429 or status_code >= 500

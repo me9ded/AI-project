@@ -52,7 +52,7 @@ Mark a box only when its tests are green and committed.
 - [x] Red: `test_rate_limiter.py`, cases R1–R3
 - [x] Green: `RateLimiter.acquire()`
 - [x] Red: cases R4–R7
-- [ ] Green: `with_retries()`
+- [x] Green: `with_retries()`
 - [ ] Refactor
 
 ## 5. Fixtures (real API responses, saved once)
