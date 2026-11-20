@@ -1,5 +1,4 @@
-"""Rate limiting, retries and the shared retrieval error (design spec section 8.3-8.4).
-"""
+"""Rate limiting, retries and the shared retrieval error (design spec section 8.3-8.4)."""
 
 import time
 from collections import deque
@@ -53,18 +52,18 @@ def with_retries(call, sleep=time.sleep, retries: int = 3, base_delay: float = 1
         try:
             response = call()
         except _RETRYABLE_EXCEPTIONS as error:
-            problem = error
+            last_problem = error
         else:
             if response.status_code < 400:
                 return response
+            last_problem = RetrievalError(f"HTTP {response.status_code}")
             if not _is_retryable_status(response.status_code):
-                raise RetrievalError(f"HTTP {response.status_code}")
-            problem = RetrievalError(f"HTTP {response.status_code}")
+                raise last_problem
 
         if attempt < retries:
             sleep(base_delay * 2 ** attempt)
 
-    raise RetrievalError(f"Gave up after {retries} retries: {problem}") from problem
+    raise RetrievalError(f"Gave up after {retries} retries: {last_problem}") from last_problem
 
 
 def _is_retryable_status(status_code: int) -> bool:

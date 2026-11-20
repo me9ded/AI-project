@@ -53,7 +53,7 @@ Mark a box only when its tests are green and committed.
 - [x] Green: `RateLimiter.acquire()`
 - [x] Red: cases R4–R7
 - [x] Green: `with_retries()`
-- [ ] Refactor
+- [x] Refactor (build the HTTP error once, clearer names)
 
 ## 5. Fixtures (real API responses, saved once)
 - [ ] `osv_query_log4j_core_2.14.1.json`: OSV query for Maven `org.apache.logging.log4j:log4j-core` 2.14.1
@@ -112,7 +112,7 @@ Mark a box only when its tests are green and committed.
 | models | M1–M5 | ☑ 24 passing |
 | version_matcher | V1–V16 | ☑ 34 passing |
 | cache | C1–C8 | ☑ 10 passing |
-| rate_limiter | R1–R7 | ☐ |
+| rate_limiter | R1–R7 | ☑ 10 passing |
 | osv_client | O1–O7 | ☐ |
 | nvd_client | N1–N9 | ☐ |
 | kev_client | K1–K4 | ☐ |
