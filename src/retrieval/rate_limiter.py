@@ -1,5 +1,6 @@
 """Rate limiting, retries and the shared retrieval error (design spec section 8.3-8.4)."""
 
+import threading
 import time
 from collections import deque
 
@@ -17,6 +18,7 @@ class RateLimiter:
     """Allow at most `max_calls` calls in any `window_seconds` sliding window.
 
     NVD allows 5 requests per 30 s without an API key and 50 with one.
+    Safe to share between threads (FastAPI runs requests on worker threads).
     The clock and sleep are passed in so tests never really wait.
     """
 
@@ -26,16 +28,18 @@ class RateLimiter:
         self.clock = clock
         self.sleep = sleep
         self._recent_calls = deque()  # timestamps of calls still inside the window
+        self._lock = threading.Lock()
 
     def acquire(self) -> None:
         """Wait (if needed) until another call is allowed, then record it."""
-        self._forget_old_calls()
-        while len(self._recent_calls) >= self.max_calls:
-            # Loop, not if: a coarse clock can make us wake a moment too early.
-            oldest = self._recent_calls[0]
-            self.sleep(oldest + self.window_seconds - self.clock())
+        with self._lock:  # one thread at a time, so two can't take the last slot
             self._forget_old_calls()
-        self._recent_calls.append(self.clock())
+            while len(self._recent_calls) >= self.max_calls:
+                # Loop, not if: a coarse clock can make us wake a moment too early.
+                oldest = self._recent_calls[0]
+                self.sleep(oldest + self.window_seconds - self.clock())
+                self._forget_old_calls()
+            self._recent_calls.append(self.clock())
 
     def _forget_old_calls(self) -> None:
         now = self.clock()
