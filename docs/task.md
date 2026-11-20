@@ -27,7 +27,7 @@ Mark a box only when its tests are green and committed.
 
 ## 1. Models – `vulnerability_models.py`
 - [x] Red: `test_vulnerability_models.py`, cases M1–M5
-- [ ] Green: `Severity`, `severity_from_score()`, `severity_from_label()`, `VulnerabilityRecord`, `RetrievalResult`
+- [x] Green: `Severity`, `severity_from_score()`, `severity_from_label()`, `VulnerabilityRecord`, `RetrievalResult`
 - [ ] Refactor
 
 ## 2. Version matcher – `version_matcher.py`
