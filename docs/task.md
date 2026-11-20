@@ -50,7 +50,7 @@ Mark a box only when its tests are green and committed.
 
 ## 4. Rate limiter and retries – `rate_limiter.py`
 - [x] Red: `test_rate_limiter.py`, cases R1–R3
-- [ ] Green: `RateLimiter.acquire()`
+- [x] Green: `RateLimiter.acquire()`
 - [ ] Red: cases R4–R7
 - [ ] Green: `with_retries()`
 - [ ] Refactor
