@@ -30,7 +30,8 @@ class RateLimiter:
     def acquire(self) -> None:
         """Wait (if needed) until another call is allowed, then record it."""
         self._forget_old_calls()
-        if len(self._recent_calls) >= self.max_calls:
+        while len(self._recent_calls) >= self.max_calls:
+            # Loop, not if: a coarse clock can make us wake a moment too early.
             oldest = self._recent_calls[0]
             self.sleep(oldest + self.window_seconds - self.clock())
             self._forget_old_calls()
