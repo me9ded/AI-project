@@ -31,7 +31,7 @@ Mark a box only when its tests are green and committed.
 - [x] Refactor (nothing needed: code already small and clear)
 
 ## 2. Version matcher – `version_matcher.py`
-- [ ] Red: parsing, cases V1, V4, V6
+- [x] Red: parsing, cases V1, V4, V6
 - [ ] Green: `parse_version()` for PyPI, npm and Maven
 - [ ] Red: ranges, cases V2, V3, V5, V7–V11
 - [ ] Green: `is_affected()`
