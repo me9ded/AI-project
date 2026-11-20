@@ -43,7 +43,7 @@ Mark a box only when its tests are green and committed.
 
 ## 3. Cache – `cache.py`
 - [x] Red: `test_cache.py`, cases C1–C4
-- [ ] Green: `SqliteCache` (`get`, `get_stale`, `set`)
+- [x] Green: `SqliteCache` (`get`, `get_stale`, `set`)
 - [ ] Red: cases C5–C8
 - [ ] Green: `cached_fetch()` and `RetrievalError` (the error lives in `rate_limiter.py` and is imported here)
 - [ ] Refactor
