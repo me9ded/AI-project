@@ -1,12 +1,49 @@
-"""OSV.dev client (design spec section 5). Stub: not implemented yet."""
+"""OSV.dev client (design spec section 5).
+
+OSV answers "which vulnerabilities affect this exact package version?" and maps
+advisory IDs (GHSA, PYSEC) to CVE aliases. Responses are returned as the raw OSV
+dicts; the service decides what to keep.
+"""
+
+import time
+
+from src.retrieval.cache import SqliteCache, cached_fetch
+from src.retrieval.rate_limiter import with_retries
+
+QUERY_URL = "https://api.osv.dev/v1/query"
+VULN_URL = "https://api.osv.dev/v1/vulns/{id}"
+TIMEOUT_SECONDS = 10
 
 
 class OsvClient:
-    def __init__(self, session, cache, sleep=None):
-        pass
+    def __init__(self, session, cache: SqliteCache, sleep=time.sleep):
+        self.session = session
+        self.cache = cache
+        self.sleep = sleep  # used between retries; tests pass a fake
 
-    def query_package(self, name, ecosystem, version):
-        raise NotImplementedError
+    def query_package(self, name: str, ecosystem: str, version: str | None) -> tuple[list[dict], bool]:
+        """Vulnerabilities affecting `name` at `version` (all versions if None).
+        Returns (vulns, is_stale)."""
+        body = {"package": {"name": name, "ecosystem": ecosystem}}
+        if version is not None:
+            body["version"] = version
+        key = f"osv:query:{ecosystem}:{name}:{version or '*'}"
 
-    def get_vuln(self, vuln_id):
-        raise NotImplementedError
+        def fetch():
+            response = with_retries(
+                lambda: self.session.post(QUERY_URL, json=body, timeout=TIMEOUT_SECONDS), sleep=self.sleep
+            )
+            return {"vulns": response.json().get("vulns", [])}
+
+        data, is_stale = cached_fetch(self.cache, key, fetch)
+        return data["vulns"], is_stale
+
+    def get_vuln(self, vuln_id: str) -> tuple[dict, bool]:
+        """One OSV entry by ID (GHSA-…, PYSEC-…, CVE-…). Returns (vuln, is_stale)."""
+        url = VULN_URL.format(id=vuln_id)
+
+        def fetch():
+            response = with_retries(lambda: self.session.get(url, timeout=TIMEOUT_SECONDS), sleep=self.sleep)
+            return response.json()
+
+        return cached_fetch(self.cache, f"osv:vuln:{vuln_id}", fetch)
