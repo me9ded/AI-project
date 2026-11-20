@@ -206,25 +206,59 @@ def test_fixed_versions_empty_when_no_fix():
     assert fixed_versions(entry) == []
 
 
+def log4j_entry(first_fix, branch_2_12_fix, latest_fix):
+    """An OSV entry shaped like the Log4j advisories: three release branches."""
+    return make_entry(
+        (
+            "ECOSYSTEM",
+            [
+                {"introduced": "2.0-beta9"}, {"fixed": first_fix},
+                {"introduced": "2.4"}, {"fixed": branch_2_12_fix},
+                {"introduced": "2.13.0"}, {"fixed": latest_fix},
+            ],
+        )
+    )
+
+
+LOG4J_ENTRIES = [
+    log4j_entry("2.3.1", "2.12.2", "2.15.0"),   # CVE-2021-44228
+    log4j_entry("2.3.1", "2.12.2", "2.16.0"),   # CVE-2021-45046
+    log4j_entry("2.3.1", "2.12.3", "2.17.0"),   # CVE-2021-45105
+    log4j_entry("2.3.2", "2.12.4", "2.17.1"),   # CVE-2021-44832
+]
+
+
 # V12: the Log4j worked example - backports below 2.14.1 are skipped, the answer is 2.17.1.
 def test_lowest_fix_for_log4j_example():
-    fixed_lists = [
-        ["2.3.1", "2.12.2", "2.15.0"],   # CVE-2021-44228
-        ["2.3.1", "2.12.2", "2.16.0"],   # CVE-2021-45046
-        ["2.3.1", "2.12.3", "2.17.0"],   # CVE-2021-45105
-        ["2.3.2", "2.12.4", "2.17.1"],   # CVE-2021-44832
-    ]
+    assert lowest_fix("2.14.1", LOG4J_ENTRIES, "Maven") == "2.17.1"
 
-    assert lowest_fix("2.14.1", fixed_lists, "Maven") == "2.17.1"
+
+def test_lowest_fix_stays_on_the_installed_branch_when_it_can():
+    assert lowest_fix("2.11.0", LOG4J_ENTRIES, "Maven") == "2.12.4"
+
+
+# V16: the recommendation must not land inside another vulnerability's range.
+def test_lowest_fix_never_recommends_a_still_vulnerable_version():
+    vuln_x = make_entry(
+        ("ECOSYSTEM", [{"introduced": "2.4"}, {"fixed": "2.12.2"}, {"introduced": "2.13.0"}, {"fixed": "2.15.0"}])
+    )
+    vuln_y = make_entry(("ECOSYSTEM", [{"introduced": "0"}, {"fixed": "2.13.1"}]))
+
+    # 2.13.1 fixes Y but is inside X's [2.13.0, 2.15.0) range, so the answer is 2.15.0.
+    assert lowest_fix("2.11.0", [vuln_x, vuln_y], "Maven") == "2.15.0"
 
 
 def test_lowest_fix_ignores_vulns_without_a_fix_above_installed():
-    fixed_lists = [["2.10.1"], []]
+    fixable = make_entry(("ECOSYSTEM", [{"introduced": "0"}, {"fixed": "2.10.1"}]))
+    never_fixed = make_entry(("ECOSYSTEM", [{"introduced": "0"}]))
 
-    assert lowest_fix("2.10", fixed_lists, "PyPI") == "2.10.1"
+    assert lowest_fix("2.10", [fixable, never_fixed], "PyPI") == "2.10.1"
 
 
 # V13: nothing fixes anything above the installed version -> None.
 def test_lowest_fix_is_none_when_no_fix_exists():
-    assert lowest_fix("3.0", [["1.0"], []], "PyPI") is None
+    old_fix_only = make_entry(("ECOSYSTEM", [{"introduced": "0"}, {"fixed": "1.0"}]))
+    never_fixed = make_entry(("ECOSYSTEM", [{"introduced": "0"}]))
+
+    assert lowest_fix("3.0", [old_fix_only, never_fixed], "PyPI") is None
     assert lowest_fix("3.0", [], "PyPI") is None
