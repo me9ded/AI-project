@@ -66,26 +66,36 @@ def _version_range_events(affected_entry: dict) -> list[list[dict]]:
 
 
 def _in_range(parsed, events: list[dict], ecosystem: str) -> bool:
-    """Walk OSV events in order. `introduced` opens an interval; `fixed` closes it
-    (excluded) and `last_affected` closes it (included). An unclosed interval runs forever."""
-    start = None
-    for event in events:
+    """OSV's reference algorithm: sort the events by version, then step through them.
+
+    `introduced` at or below the version switches "affected" on; `fixed` at or below
+    it switches it off; `last_affected` switches it off only once the version is past it.
+    """
+    affected = False
+    for event in _sorted_events(events, ecosystem):
         if "introduced" in event:
-            start = event["introduced"]
-        elif "fixed" in event and start is not None:
-            if _at_or_after(parsed, start, ecosystem) and parsed < parse_version(event["fixed"], ecosystem):
-                return True
-            start = None
-        elif "last_affected" in event and start is not None:
-            if _at_or_after(parsed, start, ecosystem) and parsed <= parse_version(event["last_affected"], ecosystem):
-                return True
-            start = None
-    return start is not None and _at_or_after(parsed, start, ecosystem)
+            if event["introduced"] == "0" or parsed >= parse_version(event["introduced"], ecosystem):
+                affected = True
+        elif "fixed" in event:
+            if parsed >= parse_version(event["fixed"], ecosystem):
+                affected = False
+        elif "last_affected" in event:
+            if parsed > parse_version(event["last_affected"], ecosystem):
+                affected = False
+    return affected
 
 
-def _at_or_after(parsed, start: str, ecosystem: str) -> bool:
-    """OSV uses introduced "0" to mean 'from the very first version'."""
-    return start == "0" or parsed >= parse_version(start, ecosystem)
+def _sorted_events(events: list[dict], ecosystem: str) -> list[dict]:
+    """Events ordered by version. OSV uses introduced "0" to mean 'the very first version'."""
+    def event_key(event: dict):
+        value = event.get("introduced") or event.get("fixed") or event.get("last_affected")
+        if value is None:
+            return (1,)  # e.g. a "limit" event: not used for matching, keep it last
+        if value == "0":
+            return (-1,)
+        return (0, parse_version(value, ecosystem))
+
+    return sorted(events, key=event_key)
 
 
 def fixed_versions(affected_entry: dict) -> list[str]:
