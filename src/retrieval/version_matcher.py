@@ -109,22 +109,27 @@ def fixed_versions(affected_entry: dict) -> list[str]:
     return found
 
 
-def lowest_fix(installed: str, fixed_lists: list[list[str]], ecosystem: str) -> str | None:
+def lowest_fix(installed: str, affected_entries: list[dict], ecosystem: str) -> str | None:
     """Lowest version that fixes every vulnerability (design spec section 6.3).
 
-    For each vulnerability take its smallest fix *above* the installed version
-    (this skips backport branches), then return the largest of those.
-    Vulnerabilities with no fix above the installed version are left out.
+    Candidates are the fixed versions above the installed one, tried from lowest
+    to highest. The first candidate that none of the vulnerabilities affect wins.
+    Vulnerabilities with no fix above the installed version can't be fixed by
+    upgrading, so they are left out (the caller warns about them).
     """
     def version_key(version: str):
         return parse_version(version, ecosystem)
 
     current = version_key(installed)
-    needed = []
-    for fixes in fixed_lists:
-        upgrades = [fix for fix in fixes if version_key(fix) > current]
+    fixable = []
+    candidates = set()
+    for entry in affected_entries:
+        upgrades = [fix for fix in fixed_versions(entry) if version_key(fix) > current]
         if upgrades:
-            needed.append(min(upgrades, key=version_key))
-    if not needed:
-        return None
-    return max(needed, key=version_key)
+            fixable.append(entry)
+            candidates.update(upgrades)
+
+    for candidate in sorted(candidates, key=version_key):
+        if not any(is_affected(candidate, entry, ecosystem) for entry in fixable):
+            return candidate
+    return None
