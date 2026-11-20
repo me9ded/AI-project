@@ -61,8 +61,8 @@ Mark a box only when its tests are green and committed.
 - [x] `osv_query_log4j_core_2.14.1.json`: OSV query for Maven `org.apache.logging.log4j:log4j-core` 2.14.1
 - [x] `osv_vuln_GHSA-jfh8-c2jp-5v3q.json`: OSV vuln lookup
 - [x] `osv_query_jinja2_2.10.json`: OSV query for PyPI `jinja2` 2.10
-- [ ] `nvd_CVE-2021-44228.json`: NVD CVE lookup
-- [ ] `nvd_not_found.json`: NVD response with `totalResults: 0`
+- [x] `nvd_CVE-2021-44228.json`: NVD CVE lookup
+- [x] `nvd_not_found.json`: NVD response with `totalResults: 0`
 - [ ] `kev_excerpt.json`: KEV feed trimmed to a few entries, including CVE-2021-44228
 - [ ] Trim large fields so each file stays readable. Commit: `test: add task 2 API fixtures`
 
