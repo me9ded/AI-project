@@ -36,7 +36,7 @@ Mark a box only when its tests are green and committed.
 - [x] Red: ranges, cases V2, V3, V5, V7–V11
 - [x] Green: `is_affected()`
 - [x] Red: fixes, cases V12–V14
-- [ ] Green: `fixed_versions()`, `lowest_fix()`
+- [x] Green: `fixed_versions()`, `lowest_fix()`
 - [ ] Refactor
 
 ## 3. Cache – `cache.py`

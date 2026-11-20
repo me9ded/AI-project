@@ -83,9 +83,32 @@ def _at_or_after(parsed, start: str, ecosystem: str) -> bool:
     return start == "0" or parsed >= parse_version(start, ecosystem)
 
 
-def fixed_versions(affected_entry):
-    raise NotImplementedError
+def fixed_versions(affected_entry: dict) -> list[str]:
+    """Every `fixed` version in the entry's version ranges, in order, without duplicates."""
+    found = []
+    for version_range in affected_entry.get("ranges", []):
+        if version_range.get("type") not in ("ECOSYSTEM", "SEMVER"):
+            continue
+        for event in version_range.get("events", []):
+            fixed = event.get("fixed")
+            if fixed is not None and fixed not in found:
+                found.append(fixed)
+    return found
 
 
-def lowest_fix(installed, fixed_lists, ecosystem):
-    raise NotImplementedError
+def lowest_fix(installed: str, fixed_lists: list[list[str]], ecosystem: str) -> str | None:
+    """Lowest version that fixes every vulnerability (design spec section 6.3).
+
+    For each vulnerability take its smallest fix *above* the installed version
+    (this skips backport branches), then return the largest of those.
+    Vulnerabilities with no fix above the installed version are left out.
+    """
+    current = parse_version(installed, ecosystem)
+    needed = []
+    for fixes in fixed_lists:
+        upgrades = [fix for fix in fixes if parse_version(fix, ecosystem) > current]
+        if upgrades:
+            needed.append(min(upgrades, key=lambda fix: parse_version(fix, ecosystem)))
+    if not needed:
+        return None
+    return max(needed, key=lambda fix: parse_version(fix, ecosystem))
