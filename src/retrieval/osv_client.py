@@ -8,7 +8,7 @@ dicts; the service decides what to keep.
 import time
 
 from src.retrieval.cache import SqliteCache, cached_fetch
-from src.retrieval.rate_limiter import with_retries
+from src.retrieval.rate_limiter import RetrievalError, with_retries
 
 QUERY_URL = "https://api.osv.dev/v1/query"
 VULN_URL = "https://api.osv.dev/v1/vulns/{id}"
@@ -36,7 +36,7 @@ class OsvClient:
                 response = with_retries(
                     lambda: self.session.post(QUERY_URL, json=page_body, timeout=TIMEOUT_SECONDS), sleep=self.sleep
                 )
-                page = response.json()
+                page = _read_json(response)
                 vulns.extend(page.get("vulns", []))
                 token = page.get("next_page_token")
                 if not token:
@@ -46,12 +46,27 @@ class OsvClient:
         data, is_stale = cached_fetch(self.cache, key, fetch)
         return data["vulns"], is_stale
 
-    def get_vuln(self, vuln_id: str) -> tuple[dict, bool]:
-        """One OSV entry by ID (GHSA-…, PYSEC-…, CVE-…). Returns (vuln, is_stale)."""
+    def get_vuln(self, vuln_id: str) -> tuple[dict | None, bool]:
+        """One OSV entry by ID (GHSA-…, PYSEC-…, CVE-…). Returns (vuln, is_stale).
+        An ID OSV does not know gives (None, False): a typo, not an outage."""
         url = VULN_URL.format(id=vuln_id)
 
         def fetch():
             response = with_retries(lambda: self.session.get(url, timeout=TIMEOUT_SECONDS), sleep=self.sleep)
-            return response.json()
+            return _read_json(response)
 
-        return cached_fetch(self.cache, f"osv:vuln:{vuln_id}", fetch)
+        try:
+            return cached_fetch(self.cache, f"osv:vuln:{vuln_id}", fetch)
+        except RetrievalError as error:
+            if error.status_code == 404:
+                return None, False
+            raise
+
+
+def _read_json(response) -> dict:
+    """The response body as JSON. A body that is not JSON counts as a failed
+    request, so cached_fetch can still fall back to stale data."""
+    try:
+        return response.json()
+    except ValueError as error:  # requests' JSONDecodeError is a ValueError
+        raise RetrievalError(f"OSV sent a body that is not JSON: {error}") from error
