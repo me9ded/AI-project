@@ -32,7 +32,7 @@ Mark a box only when its tests are green and committed.
 
 ## 2. Version matcher – `version_matcher.py`
 - [x] Red: parsing, cases V1, V4, V6
-- [ ] Green: `parse_version()` for PyPI, npm and Maven
+- [x] Green: `parse_version()` for PyPI, npm and Maven
 - [ ] Red: ranges, cases V2, V3, V5, V7–V11
 - [ ] Green: `is_affected()`
 - [ ] Red: fixes, cases V12–V14
