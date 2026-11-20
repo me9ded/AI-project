@@ -46,7 +46,7 @@ Mark a box only when its tests are green and committed.
 - [x] Green: `SqliteCache` (`get`, `get_stale`, `set`)
 - [x] Red: cases C5–C8
 - [x] Green: `cached_fetch()` and `RetrievalError` (the error lives in `rate_limiter.py` and is imported here)
-- [ ] Refactor
+- [x] Refactor (named TTL constant, documented None = not cached)
 
 ## 4. Rate limiter and retries – `rate_limiter.py`
 - [ ] Red: `test_rate_limiter.py`, cases R1–R3
@@ -111,7 +111,7 @@ Mark a box only when its tests are green and committed.
 |--------|-------|--------|
 | models | M1–M5 | ☑ 24 passing |
 | version_matcher | V1–V16 | ☑ 34 passing |
-| cache | C1–C8 | ☐ |
+| cache | C1–C8 | ☑ 10 passing |
 | rate_limiter | R1–R7 | ☐ |
 | osv_client | O1–O7 | ☐ |
 | nvd_client | N1–N9 | ☐ |

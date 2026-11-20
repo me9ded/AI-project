@@ -3,6 +3,9 @@
 Values are stored as JSON with the time they were fetched. Entries older than the
 TTL are "stale": get() ignores them, but get_stale() still returns them so the
 service can fall back to old data when an API is down (offline demo).
+
+None means "not cached", so callers store the raw API response (a dict or list),
+never None itself.
 """
 
 import json
@@ -12,6 +15,8 @@ from contextlib import closing
 from pathlib import Path
 
 from src.retrieval.rate_limiter import RetrievalError
+
+DEFAULT_TTL_SECONDS = 24 * 60 * 60  # one day (design spec NFR1)
 
 _CREATE_TABLE = """
 CREATE TABLE IF NOT EXISTS cache (
@@ -25,7 +30,7 @@ CREATE TABLE IF NOT EXISTS cache (
 class SqliteCache:
     """A tiny key -> JSON store in one SQLite file."""
 
-    def __init__(self, path, ttl_seconds: float = 24 * 60 * 60, clock=time.time):
+    def __init__(self, path, ttl_seconds: float = DEFAULT_TTL_SECONDS, clock=time.time):
         self.path = Path(path)
         self.ttl_seconds = ttl_seconds
         self.clock = clock
@@ -48,7 +53,7 @@ class SqliteCache:
         return None if row is None else json.loads(row[0])
 
     def set(self, key: str, value) -> None:
-        """Store `value` (anything JSON can hold), replacing any old entry."""
+        """Store `value` (anything JSON can hold except None), replacing any old entry."""
         self._run(
             "INSERT OR REPLACE INTO cache (key, value, fetched_at) VALUES (?, ?, ?)",
             (key, json.dumps(value), self.clock()),
