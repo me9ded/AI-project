@@ -194,28 +194,34 @@ enough for the versions in our fixtures and demo. Edge cases beyond that are lis
 ### 6.2 `is_affected(version, affected_entry, ecosystem) -> bool`
 An OSV `affected` entry is affected if **either** of these is true:
 1. `version` is in the explicit `versions` list, **or**
-2. for any range with `type` `ECOSYSTEM` or `SEMVER` (`GIT` ranges are ignored), walking its events in order:
-   - `introduced: X` opens an interval (`"0"` means "from the start"),
-   - `fixed: Y` closes it, excluding Y (`X <= v < Y`),
-   - `last_affected: Y` closes it, including Y (`X <= v <= Y`),
-   - an interval that is never closed means "affected in every later version".
+2. for any range with `type` `ECOSYSTEM` or `SEMVER` (`GIT` ranges are ignored), OSV's reference algorithm says so:
+   - **sort the events by version first**: the OSV schema does not require them to be in order. `introduced: "0"` means "from the start" and sorts first.
+   - start with `affected = False` and step through the sorted events:
+     - `introduced: X` with `X <= v` → `affected = True`
+     - `fixed: Y` with `Y <= v` → `affected = False` (so the fixed version itself is not affected)
+     - `last_affected: Y` with `Y < v` → `affected = False` (so Y itself is still affected)
+   - the value left at the end is the answer. A range that is never closed means "affected in every later version".
 
-### 6.3 `lowest_fix(installed, fixed_lists, ecosystem) -> str | None`
-- `fixed_lists` holds one list of fixed versions per vulnerability.
-- For each vulnerability, take the **smallest fixed version greater than `installed`**. This skips backport
-  branches below the installed version.
-- The answer is the **largest** of those values.
-- A vulnerability with no fixed version above `installed` is left out and a warning is added. If none have
-  a fix, the answer is `None`.
+### 6.3 `lowest_fix(installed, affected_entries, ecosystem) -> str | None`
+- `affected_entries` holds the OSV `affected` entry for this package from each vulnerability.
+- **Candidates** are all fixed versions (from `fixed_versions()`) **greater than `installed`**. This skips
+  backport branches below the installed version.
+- Try the candidates from lowest to highest. The answer is the **first candidate that `is_affected()` clears for
+  every vulnerability**. Checking each candidate against the full ranges matters when fixes sit on different
+  release branches: a version that fixes one vulnerability can still be inside another's range.
+- A vulnerability with no fixed version above `installed` can't be fixed by upgrading. It is left out of the
+  check and the service adds a warning. If no candidate clears everything, the answer is `None`.
 
-Worked example (log4j-core 2.14.1):
-| CVE | Fixed versions (OSV) | Smallest > 2.14.1 |
-|-----|----------------------|-------------------|
+Worked example (log4j-core 2.14.1, each CVE affects `[2.0-beta9, a)`, `[2.4, b)` and `[2.13.0, c)`):
+| CVE | Fixed versions a, b, c | Fixed versions > 2.14.1 |
+|-----|------------------------|-------------------------|
 | CVE-2021-44228 | 2.3.1, 2.12.2, 2.15.0 | 2.15.0 |
 | CVE-2021-45046 | 2.3.1, 2.12.2, 2.16.0 | 2.16.0 |
 | CVE-2021-45105 | 2.3.1, 2.12.3, 2.17.0 | 2.17.0 |
 | CVE-2021-44832 | 2.3.2, 2.12.4, 2.17.1 | 2.17.1 |
-| **Result** | | **2.17.1** |
+| **Result** | 2.15.0, 2.16.0 and 2.17.0 are each still inside a later CVE's range | **2.17.1** |
+
+From 2.11.0 the same data gives **2.12.4**, because the 2.12 branch fixes for all four CVEs are above 2.11.0.
 
 ---
 
@@ -232,7 +238,7 @@ Worked example (log4j-core 2.14.1):
 4. **Key and merge.** A record's key is its first CVE alias in sorted order, or the OSV ID if it has none. If two OSV entries share a key (for example the GHSA and PYSEC entries for the same CVE), merge their aliases and fixed versions and keep the first summary.
 5. **Enrich.** For each key that starts with `CVE-`, call `nvd.get_cve()` and `kev.is_exploited()`.
 6. **Severity and sources** (sections 7.3 and 7.4).
-7. **Upgrades.** For each package, `lowest_fix()` over the fixed lists of its affected records.
+7. **Upgrades.** For each package, `lowest_fix()` over the OSV `affected` entries of its affected records. Add a warning for each vulnerability that has no fix above the installed version.
 8. Sort the records and return a `RetrievalResult`.
 
 ### 7.2 Error handling
@@ -328,9 +334,11 @@ Clocks and `sleep` are fakes, so no test actually waits.
 | V9 | `introduced` with no closing event | every later version → True | FR7 |
 | V10 | two ranges `[1.0,1.5)` and `[2.0,2.5)` | 1.7 → False, 2.1 → True | FR7 |
 | V11 | `GIT` range only | False | FR7 |
-| V12 | `lowest_fix` for the Log4j table (§6.3) | `"2.17.1"` | FR8 |
+| V12 | `lowest_fix` for the Log4j entries (§6.3), from 2.14.1 and from 2.11.0 | `"2.17.1"`, `"2.12.4"` | FR8 |
 | V13 | `lowest_fix` where no vuln has a fix above installed | `None` | FR8 |
 | V14 | `fixed_versions(entry)` | every `fixed` event value | FR8 |
+| V15 | events listed out of order (`introduced 1.0, introduced 2.0, fixed 2.5, fixed 1.5`) | 1.2 → True, 1.7 → False | FR7 |
+| V16 | `lowest_fix` where the smallest fix of one vuln (2.13.1) is inside another vuln's `[2.13.0, 2.15.0)` | `"2.15.0"` | FR8 |
 
 ### 9.3 `test_cache.py`
 | ID | Case | Expect | Req |
@@ -434,7 +442,7 @@ models → version_matcher → cache → rate_limiter → osv_client → nvd_cli
 | Risk (proposal ID) | Handling |
 |---|---|
 | NVD throttling or outage (T2-R1) | API key, rate limiter, backoff, 24 h cache, stale fallback, OSV stays the primary source |
-| Wrong range matching (T2-R2) | `packaging` for PyPI; tests V1–V14 cover the demo packages. Maven/npm parsing is simplified (no `sp`/`ga` qualifier ordering, no build metadata), so OSV's own filtering is kept as the first line of defence |
+| Wrong range matching (T2-R2) | `packaging` for PyPI; tests V1–V16 cover the demo packages. Maven/npm parsing is simplified: pre-release labels compare as text (`beta10` < `beta9`), `sp` is not ordered after the release, npm build metadata (`+build`) is treated as a pre-release, and Maven variant suffixes like Guava's `-jre`/`-android` are treated as pre-releases, so OSV's own filtering is kept as the first line of defence |
 | No CVSS yet (T2-R3) | OSV label fallback, then `PENDING` |
-| Backport branches confuse "lowest fix" | only fixed versions above the installed version count (§6.3) |
+| Backport branches confuse "lowest fix" | only fixed versions above the installed version count, and each candidate is checked against every vulnerability's full ranges (§6.3) |
 | Contract drift with Task 1 / Task 3 | the Pydantic models are the contract; Nibir and Fouzi review this spec |

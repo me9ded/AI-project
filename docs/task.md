@@ -38,6 +38,8 @@ Mark a box only when its tests are green and committed.
 - [x] Red: fixes, cases V12–V14
 - [x] Green: `fixed_versions()`, `lowest_fix()`
 - [x] Refactor (shared range filter and sort key)
+- [x] Review fix, Red: unsorted events (V15), safe `lowest_fix` picks (V16)
+- [x] Review fix, Green: sort events per the OSV algorithm; `lowest_fix` takes OSV entries and checks each candidate
 
 ## 3. Cache – `cache.py`
 - [ ] Red: `test_cache.py`, cases C1–C4
@@ -108,7 +110,7 @@ Mark a box only when its tests are green and committed.
 | Module | Tests | Status |
 |--------|-------|--------|
 | models | M1–M5 | ☑ 24 passing |
-| version_matcher | V1–V14 | ☑ 30 passing |
+| version_matcher | V1–V16 | ☑ 34 passing |
 | cache | C1–C8 | ☐ |
 | rate_limiter | R1–R7 | ☐ |
 | osv_client | O1–O7 | ☐ |
