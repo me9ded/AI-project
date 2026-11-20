@@ -4,6 +4,14 @@ Saved once on **2026-11-20** from the public APIs, then trimmed so they stay rea
 Unit tests read them with `load_fixture()` from `tests/unit/fakes.py`. `tests/unit/test_fixtures.py`
 checks that trimming kept the facts the other tests rely on.
 
+**To refresh** (downloads everything again and rewrites these files):
+```
+python scripts/refresh_fixtures.py
+python -m pytest
+```
+Answers that depend on the date can change after a refresh. For example, new Log4j advisories
+change the recommended upgrade, so update the tests that pin those answers.
+
 | File | Source request |
 |------|----------------|
 | `osv_query_log4j_core_2.14.1.json` | `POST https://api.osv.dev/v1/query` `{"package": {"name": "org.apache.logging.log4j:log4j-core", "ecosystem": "Maven"}, "version": "2.14.1"}` |
