@@ -52,6 +52,7 @@ def test_jinja2_demo_against_the_real_apis(live_service):
 
     assert result.records
     assert all(record.affected is True for record in result.records)
-    assert all(record.id.startswith("CVE-") for record in result.records)
+    # At least one CVE; a future GitHub-only advisory (no CVE) would be fine too.
+    assert any(record.id.startswith("CVE-") for record in result.records)
     assert "jinja2" in result.recommended_upgrades
     assert result.incomplete is False, result.warnings
