@@ -105,9 +105,9 @@ Mark a box only when its tests are green and committed.
 - [x] Review fixes, Red/Green: default service built once under a lock (concurrent first use); `~` in `CVE_CACHE_PATH` means the home folder
 
 ## 11. Live checks and demo prep
-- [ ] `tests/integration/test_live.py`, cases L1–L2 (`python -m pytest -m live`)
-- [ ] `scripts/warm_cache.py`: runs the demo inputs to fill the cache
-- [ ] Offline check: warm the cache, disconnect from the network, run again, and confirm the results match with `incomplete` set correctly
+- [x] `tests/integration/test_live.py`, cases L1–L2 (`python -m pytest -m live`): both pass against the real APIs (63 s without an NVD key)
+- [x] Red/Green: `scripts/warm_cache.py` (demo inputs, summary line, offline comparison; 5 tests)
+- [x] Offline check: `python -m scripts.warm_cache --check-offline` filled `cache/retrieval.sqlite3` and gave identical answers with no network. Results on 2026-11-20: Log4Shell 9 vulns (log4j-core → 2.25.4, log4j-api → 2.25.5), jinja2 6 (→ 3.1.6), jackson-databind 60 (→ 2.18.11). Stale-cache behaviour (`incomplete=True` after 24 h) is covered by unit tests
 
 ## 12. Hand-off
 - [ ] Every unit test green: `python -m pytest -v`
@@ -128,4 +128,5 @@ Mark a box only when its tests are green and committed.
 | vulnerability_service | S1–S29 | ☑ 35 passing |
 | fixtures | sanity + refresh script | ☑ 14 passing |
 | entry point | E1–E7 | ☑ 20 passing |
-| live | L1–L2 | ☐ |
+| warm_cache | demo prep | ☑ 5 passing |
+| live | L1–L2 | ☑ 2 passing (opt-in) |

@@ -480,6 +480,8 @@ Clocks and `sleep` are fakes, so no test actually waits.
 | L1 | `retrieve()` on the Log4Shell extraction with the real APIs | the 4 demo CVEs present (OSV may return newer ones too), 44228 CVSS 10.0 and in KEV, upgrade ≥ 2.17.1 |
 | L2 | PyPI `jinja2==2.10` | at least one CVE, `affected=True` |
 
+Run on 2026-11-20 without an NVD key: both passed in 63 s (NVD rate-limit waits).
+
 ### 9.10 Build order (one Red-Green-Refactor cycle each, two commits per cycle)
 models → version_matcher → cache → rate_limiter → osv_client → nvd_client → kev_client → vulnerability_service → `retrieve()` + live tests → `scripts/warm_cache.py`.
 
@@ -492,7 +494,7 @@ models → version_matcher → cache → rate_limiter → osv_client → nvd_cli
 | `requirements.txt` | `requests`, `pydantic>=2`, `packaging`, `python-dotenv`, `pytest` |
 | `pytest.ini` | `pythonpath = .`, marker `live`, `addopts = -m "not live"` |
 | `.gitignore` | `.env`, `cache/`, `__pycache__/`, `.pytest_cache/` |
-| `scripts/warm_cache.py` | runs `retrieve()` over the demo inputs to fill the cache before the demo |
+| `scripts/warm_cache.py` | `python -m scripts.warm_cache [--check-offline]`: runs the three demo inputs (Log4Shell log, pip-audit jinja2, Jackson note) to fill the cache, prints one line each; `--check-offline` reruns them with no network and compares |
 
 ---
 
