@@ -96,3 +96,77 @@ def test_repeat_lookup_uses_cache_and_skips_the_limiter(tmp_path):
     assert len(session.calls) == 1
     assert limiter.acquired == 1
     assert cve.cvss_score == 10.0
+
+
+# ---------------------------------------------------------------------------
+# Scores and CWEs from hand-made records
+# ---------------------------------------------------------------------------
+
+def metric(score, metric_type="Primary"):
+    return {"type": metric_type, "cvssData": {"baseScore": score}}
+
+
+def nvd_record(metrics=None, weaknesses=None):
+    cve = {
+        "id": "CVE-2026-0001",
+        "descriptions": [{"lang": "es", "value": "Descripción"}, {"lang": "en", "value": "Description"}],
+        "metrics": metrics or {},
+        "weaknesses": weaknesses or [],
+    }
+    return FakeResponse(200, {"totalResults": 1, "vulnerabilities": [{"cve": cve}]})
+
+
+def score_for(tmp_path, metrics):
+    client, _, _ = make_client(tmp_path, [nvd_record(metrics=metrics)])
+    cve, _ = client.get_cve("CVE-2026-0001")
+    return cve.cvss_score
+
+
+# N4: fall back to older CVSS versions when newer ones are missing.
+def test_falls_back_to_v30_then_v2(tmp_path):
+    assert score_for(tmp_path / "a", {"cvssMetricV30": [metric(7.5)], "cvssMetricV2": [metric(5.0)]}) == 7.5
+    assert score_for(tmp_path / "b", {"cvssMetricV2": [metric(5.0)]}) == 5.0
+
+
+# N13: CVSS v4.0 comes after v3.1 but before v3.0 and v2.
+def test_cvss_v40_order(tmp_path):
+    assert score_for(tmp_path / "a", {"cvssMetricV40": [metric(8.7)]}) == 8.7
+    assert score_for(tmp_path / "b", {"cvssMetricV40": [metric(8.7)], "cvssMetricV30": [metric(7.5)]}) == 8.7
+    assert score_for(tmp_path / "c", {"cvssMetricV31": [metric(9.8)], "cvssMetricV40": [metric(8.7)]}) == 9.8
+
+
+# N5: NVD's own (Primary) score wins over a Secondary (CNA) score, whatever the order.
+def test_primary_score_preferred_over_secondary(tmp_path):
+    metrics = {"cvssMetricV31": [metric(6.1, "Secondary"), metric(7.2, "Primary")]}
+
+    assert score_for(tmp_path, metrics) == 7.2
+
+
+def test_secondary_score_used_when_no_primary(tmp_path):
+    assert score_for(tmp_path, {"cvssMetricV31": [metric(6.1, "Secondary")]}) == 6.1
+
+
+# N6: no CVSS metrics at all (NVD has not scored it yet) -> None, severity becomes PENDING later.
+def test_no_metrics_gives_no_score(tmp_path):
+    assert score_for(tmp_path, {}) is None
+
+
+# N7: NVD placeholders are not real weaknesses; duplicates are listed once.
+def test_cwe_placeholders_removed_and_duplicates_merged(tmp_path):
+    weaknesses = [
+        {"description": [{"lang": "en", "value": "NVD-CWE-noinfo"}, {"lang": "en", "value": "CWE-79"}]},
+        {"description": [{"lang": "en", "value": "CWE-79"}, {"lang": "en", "value": "NVD-CWE-Other"}]},
+    ]
+    client, _, _ = make_client(tmp_path, [nvd_record(weaknesses=weaknesses)])
+
+    cve, _ = client.get_cve("CVE-2026-0001")
+
+    assert cve.cwes == ["CWE-79"]
+
+
+def test_english_description_chosen_when_not_first(tmp_path):
+    client, _, _ = make_client(tmp_path, [nvd_record()])
+
+    cve, _ = client.get_cve("CVE-2026-0001")
+
+    assert cve.summary == "Description"
