@@ -5,26 +5,11 @@ and that our version matcher agrees with real OSV data for the Log4j demo.
 """
 
 from src.retrieval.version_matcher import is_affected, lowest_fix
+from src.retrieval.vulnerability_service import package_entry
 from tests.unit.fakes import load_fixture
 
 LOG4J_CORE = "org.apache.logging.log4j:log4j-core"
 LOG4J_CVES = {"CVE-2021-44228", "CVE-2021-45046", "CVE-2021-45105", "CVE-2021-44832"}
-
-
-def package_entry(vuln, name, ecosystem):
-    """All of a package's `affected` entries in one OSV vuln, merged into one.
-
-    Real OSV data often splits a package into one entry per release branch
-    (CVE-2021-44228 has three for log4j-core), so the ranges must be combined.
-    """
-    entries = [
-        entry for entry in vuln["affected"]
-        if entry["package"]["ecosystem"] == ecosystem and entry["package"]["name"].lower() == name.lower()
-    ]
-    return {
-        "ranges": [r for entry in entries for r in entry.get("ranges", [])],
-        "versions": [v for entry in entries for v in entry.get("versions", [])],
-    }
 
 
 def log4j_vulns():
