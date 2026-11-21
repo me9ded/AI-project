@@ -1,6 +1,20 @@
-"""NVD API 2.0 client (design spec section 5). Stub: not implemented yet."""
+"""NVD API 2.0 client (design spec section 5).
 
+NVD adds what OSV lacks: the CVSS base score, CWE weakness IDs and the official
+description. The raw response is cached; parsing happens on the way out.
+"""
+
+import time
 from dataclasses import dataclass
+
+from src.retrieval.cache import SqliteCache, cached_fetch
+from src.retrieval.rate_limiter import with_retries
+
+NVD_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
+TIMEOUT_SECONDS = 10
+
+# CVSS versions, best first. Other metric keys (e.g. "ssvcV203") are not scores.
+SCORE_KEYS = ("cvssMetricV31", "cvssMetricV30", "cvssMetricV2")
 
 
 @dataclass(frozen=True)
@@ -12,8 +26,61 @@ class NvdCve:
 
 
 class NvdClient:
-    def __init__(self, session, cache, limiter, api_key=None, sleep=None):
-        pass
+    def __init__(self, session, cache: SqliteCache, limiter, api_key: str | None = None, sleep=time.sleep):
+        self.session = session
+        self.cache = cache
+        self.limiter = limiter  # shared RateLimiter: 5 or 50 requests per 30 s
+        self.headers = {"apiKey": api_key} if api_key else {}
+        self.sleep = sleep
 
-    def get_cve(self, cve_id):
-        raise NotImplementedError
+    def get_cve(self, cve_id: str) -> tuple[NvdCve | None, bool]:
+        """NVD's record for `cve_id`, or None if NVD has none. Returns (cve, is_stale)."""
+
+        def fetch():
+            self.limiter.acquire()
+            response = with_retries(
+                lambda: self.session.get(
+                    NVD_URL, params={"cveId": cve_id}, headers=self.headers, timeout=TIMEOUT_SECONDS
+                ),
+                sleep=self.sleep,
+            )
+            return response.json()
+
+        data, is_stale = cached_fetch(self.cache, f"nvd:cve:{cve_id}", fetch)
+        return _parse_cve(data), is_stale
+
+
+def _parse_cve(data: dict) -> NvdCve | None:
+    if not data.get("vulnerabilities"):
+        return None  # NVD answers an unknown CVE with HTTP 200 and no results
+    cve = data["vulnerabilities"][0]["cve"]
+    return NvdCve(
+        id=cve["id"],
+        summary=_english_description(cve),
+        cvss_score=_base_score(cve.get("metrics", {})),
+        cwes=_cwe_ids(cve),
+    )
+
+
+def _english_description(cve: dict) -> str:
+    for description in cve.get("descriptions", []):
+        if description.get("lang") == "en":
+            return description.get("value", "")
+    return ""
+
+
+def _base_score(metrics: dict) -> float | None:
+    for key in SCORE_KEYS:
+        if metrics.get(key):
+            return metrics[key][0]["cvssData"]["baseScore"]
+    return None
+
+
+def _cwe_ids(cve: dict) -> list[str]:
+    found = []
+    for weakness in cve.get("weaknesses", []):
+        for description in weakness.get("description", []):
+            value = description.get("value", "")
+            if value not in found:
+                found.append(value)
+    return found
