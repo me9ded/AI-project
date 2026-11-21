@@ -13,8 +13,12 @@ from src.retrieval.rate_limiter import with_retries
 NVD_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 TIMEOUT_SECONDS = 10
 
-# CVSS versions, best first. Other metric keys (e.g. "ssvcV203") are not scores.
-SCORE_KEYS = ("cvssMetricV31", "cvssMetricV30", "cvssMetricV2")
+# CVSS versions, best first (design spec FR5). Other metric keys (e.g. "ssvcV203")
+# are not scores. v4.0 uses the same rating bands as v3.x.
+SCORE_KEYS = ("cvssMetricV31", "cvssMetricV40", "cvssMetricV30", "cvssMetricV2")
+
+# NVD placeholders meaning "no CWE known"; they are not real weaknesses.
+CWE_PLACEHOLDERS = {"NVD-CWE-noinfo", "NVD-CWE-Other"}
 
 
 @dataclass(frozen=True)
@@ -70,9 +74,13 @@ def _english_description(cve: dict) -> str:
 
 
 def _base_score(metrics: dict) -> float | None:
+    """The first CVSS version present wins; within it NVD's own (Primary) score
+    is preferred over a CNA's (Secondary) score."""
     for key in SCORE_KEYS:
-        if metrics.get(key):
-            return metrics[key][0]["cvssData"]["baseScore"]
+        entries = metrics.get(key)
+        if entries:
+            primary = [entry for entry in entries if entry.get("type") == "Primary"]
+            return (primary or entries)[0]["cvssData"]["baseScore"]
     return None
 
 
@@ -81,6 +89,6 @@ def _cwe_ids(cve: dict) -> list[str]:
     for weakness in cve.get("weaknesses", []):
         for description in weakness.get("description", []):
             value = description.get("value", "")
-            if value not in found:
+            if value and value not in CWE_PLACEHOLDERS and value not in found:
                 found.append(value)
     return found
