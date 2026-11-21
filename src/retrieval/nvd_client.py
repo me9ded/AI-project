@@ -1,14 +1,15 @@
 """NVD API 2.0 client (design spec section 5).
 
 NVD adds what OSV lacks: the CVSS base score, CWE weakness IDs and the official
-description. The raw response is cached; parsing happens on the way out.
+description. Replies are parsed before caching, so only the few fields we use are
+stored and a reply with an unexpected shape is never cached.
 """
 
 import time
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 
 from src.retrieval.cache import SqliteCache, cached_fetch
-from src.retrieval.rate_limiter import read_json, with_retries
+from src.retrieval.rate_limiter import RetrievalError, read_json, with_retries
 
 NVD_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 TIMEOUT_SECONDS = 10
@@ -26,7 +27,7 @@ class NvdCve:
     id: str
     summary: str
     cvss_score: float | None
-    cwes: list
+    cwes: list[str]
 
 
 class NvdClient:
@@ -42,10 +43,19 @@ class NvdClient:
 
         def fetch():
             response = with_retries(lambda: self._request(cve_id), sleep=self.sleep)
-            return read_json(response, "NVD")
+            data = read_json(response, "NVD")
+            try:
+                cve = _parse_cve(data)
+            except (KeyError, IndexError, TypeError) as error:  # NVD's format changed
+                raise RetrievalError(f"NVD reply for {cve_id} has an unexpected format: {error!r}") from error
+            # Cache a small dict, never None ("not cached"): found or not found.
+            return {"found": False} if cve is None else {"found": True, **asdict(cve)}
 
-        data, is_stale = cached_fetch(self.cache, f"nvd:cve:{cve_id}", fetch)
-        return _parse_cve(data), is_stale
+        cached, is_stale = cached_fetch(self.cache, f"nvd:cve:{cve_id}", fetch)
+        if not cached["found"]:
+            return None, is_stale
+        fields = {key: value for key, value in cached.items() if key != "found"}
+        return NvdCve(**fields), is_stale
 
     def _request(self, cve_id: str):
         """One HTTP attempt. Every attempt, retries included, counts against NVD's limit."""
