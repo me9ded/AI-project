@@ -8,7 +8,6 @@
 | **Branch / folder** | `brian` / `src/retrieval/` |
 | **Upstream** | Task 1 – Input Parsing & Extraction (Nibir) |
 | **Downstream** | Task 3 – Graph RAG / Neo4j loader (Fouzi), Task 4 – API pipeline (Mariam) |
-| **Status** | Draft for team review |
 
 **Development rules**
 1. **Red → Green → Refactor.** Every behaviour starts as a failing test (section 9). We write the least code that makes it pass, then tidy up while the tests stay green.
@@ -505,4 +504,3 @@ models → version_matcher → cache → rate_limiter → osv_client → nvd_cli
 | Wrong range matching (T2-R2) | `packaging` for PyPI; tests V1–V16 cover the demo packages. Maven/npm parsing is simplified: pre-release labels compare as text (`beta10` < `beta9`), `sp` is not ordered after the release, npm build metadata (`+build`) is treated as a pre-release, and Maven variant suffixes like Guava's `-jre`/`-android` are treated as pre-releases, so OSV's own filtering is kept as the first line of defence |
 | No CVSS yet (T2-R3) | OSV label fallback, then `PENDING` |
 | Backport branches confuse "lowest fix" | only fixed versions above the installed version count, and each candidate is checked against every vulnerability's full ranges (§6.3) |
-| Contract drift with Task 1 / Task 3 | the Pydantic models are the contract; Nibir and Fouzi review this spec |
