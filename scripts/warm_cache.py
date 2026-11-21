@@ -1,9 +1,13 @@
 """Fill the vulnerability cache with the demo inputs before the demo.
 
-Run from the project root (as a module, so `src` can be imported):
+Run from the project root:
 
-    python -m scripts.warm_cache                  # fill the cache (settings from .env)
-    python -m scripts.warm_cache --check-offline  # then prove the demo works with no network
+    python scripts/warm_cache.py                  # fill the cache (settings from .env)
+    python scripts/warm_cache.py --check-offline  # then prove the demo works with no network
+
+(`python -m scripts.warm_cache` works too.) It exits 1 if the cache could not be fully
+filled, for example because an API was down. Without an NVD_API_KEY, NVD allows 5
+requests per 30 seconds, so the Jackson input (about 60 CVEs) takes several minutes.
 
 The cache entries stay fresh for 24 hours; after that the app still uses them when
 the network is down, but marks the results as possibly incomplete.
@@ -11,10 +15,14 @@ the network is down, but marks the results as possibly incomplete.
 
 import argparse
 import sys
+from pathlib import Path
 
-import requests
+if __package__ in (None, ""):  # run as a file: make the project folder importable
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.retrieval import build_service, load_env
+import requests  # noqa: E402  (after the path fix above)
+
+from src.retrieval import build_service, load_env  # noqa: E402
 
 # The demo inputs from the proposal (section 4.3), as Task 1 would extract them.
 DEMO_INPUTS = {
@@ -64,9 +72,12 @@ def summarise(label: str, result) -> str:
     """One line per input, e.g. 'Log4Shell log line: 8 vulnerabilities, upgrade ... | complete | 0 warnings'."""
     upgrades = ", ".join(f"{name} -> {version}" for name, version in result.recommended_upgrades.items()) or "none"
     status = "INCOMPLETE" if result.incomplete else "complete"
-    count = len(result.warnings)
-    return (f"{label}: {len(result.records)} vulnerabilities, upgrade {upgrades} | {status} | "
-            f"{count} warning{'' if count == 1 else 's'}")
+    return (f"{label}: {_plural(len(result.records), 'vulnerability', 'vulnerabilities')}, "
+            f"upgrade {upgrades} | {status} | {_plural(len(result.warnings), 'warning', 'warnings')}")
+
+
+def _plural(count: int, one: str, many: str) -> str:
+    return f"{count} {one if count == 1 else many}"
 
 
 def check_offline(offline_service, inputs: dict, expected: dict) -> list[str]:
@@ -91,13 +102,19 @@ def main(argv=None) -> int:
         for warning in result.warnings:
             print(f"    warning: {warning}")
 
-    if not args.check_offline:
-        return 0
-    problems = check_offline(build_service(OfflineSession(), env), DEMO_INPUTS, results)
-    print("Offline check:", "OK, every input gives the same answer with no network" if not problems else "FAILED")
-    for problem in problems:
-        print(f"    {problem}")
-    return 1 if problems else 0
+    # An incomplete warm-up means an API failed, so some answers are missing from the
+    # cache. The offline check alone cannot see that: it compares against this run.
+    filled = not any(result.incomplete for result in results.values())
+    if not filled:
+        print("Cache NOT fully filled: an API failed during the warm-up (see the warnings). Run again when online.")
+
+    problems = []
+    if args.check_offline:
+        problems = check_offline(build_service(OfflineSession(), env), DEMO_INPUTS, results)
+        print("Offline check:", "OK, every input gives the same answer with no network" if not problems else "FAILED")
+        for problem in problems:
+            print(f"    {problem}")
+    return 0 if filled and not problems else 1
 
 
 if __name__ == "__main__":
