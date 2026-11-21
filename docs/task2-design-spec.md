@@ -124,7 +124,7 @@ NVD CPE configuration matching (OSV ranges are more precise for packages), and a
 - `ecosystem` ∈ `PyPI | npm | Maven | unknown`. Packages marked `unknown` are skipped with a warning, because OSV needs an ecosystem.
 - Missing lists are treated as empty.
 
-### 4.2 Output (to Task 3, *proposed, needs agreement with Fouzi*)
+### 4.2 Output (to Task 3)
 ```python
 Severity = Literal["CRITICAL", "HIGH", "MEDIUM", "LOW", "NONE", "PENDING"]
 
