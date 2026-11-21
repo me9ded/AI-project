@@ -9,7 +9,7 @@ import time
 from urllib.parse import quote
 
 from src.retrieval.cache import SqliteCache, cached_fetch
-from src.retrieval.rate_limiter import RetrievalError, with_retries
+from src.retrieval.rate_limiter import RetrievalError, read_json, with_retries
 
 QUERY_URL = "https://api.osv.dev/v1/query"
 VULN_URL = "https://api.osv.dev/v1/vulns/{id}"
@@ -65,17 +65,8 @@ class OsvClient:
         response = with_retries(
             lambda: self.session.post(QUERY_URL, json=body, timeout=TIMEOUT_SECONDS), sleep=self.sleep
         )
-        return _read_json(response)
+        return read_json(response, "OSV")
 
     def _get(self, url: str) -> dict:
         response = with_retries(lambda: self.session.get(url, timeout=TIMEOUT_SECONDS), sleep=self.sleep)
-        return _read_json(response)
-
-
-def _read_json(response) -> dict:
-    """The response body as JSON. A body that is not JSON counts as a failed
-    request, so cached_fetch can still fall back to stale data."""
-    try:
-        return response.json()
-    except ValueError as error:  # requests' JSONDecodeError is a ValueError
-        raise RetrievalError(f"OSV sent a body that is not JSON: {error}") from error
+        return read_json(response, "OSV")

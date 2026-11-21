@@ -8,7 +8,7 @@ import time
 from dataclasses import dataclass
 
 from src.retrieval.cache import SqliteCache, cached_fetch
-from src.retrieval.rate_limiter import RetrievalError, with_retries
+from src.retrieval.rate_limiter import read_json, with_retries
 
 NVD_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 TIMEOUT_SECONDS = 10
@@ -42,10 +42,7 @@ class NvdClient:
 
         def fetch():
             response = with_retries(lambda: self._request(cve_id), sleep=self.sleep)
-            try:
-                return response.json()
-            except ValueError as error:  # a body that is not JSON counts as a failed request
-                raise RetrievalError(f"NVD sent a body that is not JSON: {error}") from error
+            return read_json(response, "NVD")
 
         data, is_stale = cached_fetch(self.cache, f"nvd:cve:{cve_id}", fetch)
         return _parse_cve(data), is_stale

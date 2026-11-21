@@ -82,3 +82,12 @@ def with_retries(call, sleep=time.sleep, retries: int = 3, base_delay: float = 1
 
 def _is_retryable_status(status_code: int) -> bool:
     return status_code == 429 or status_code >= 500
+
+
+def read_json(response, source: str):
+    """The response body as JSON. A body that is not JSON counts as a failed request,
+    so cached_fetch can still fall back to stale data."""
+    try:
+        return response.json()
+    except ValueError as error:  # requests' JSONDecodeError is a ValueError
+        raise RetrievalError(f"{source} sent a body that is not JSON: {error}") from error
