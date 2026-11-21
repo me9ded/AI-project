@@ -199,3 +199,13 @@ def test_empty_version_is_treated_as_unknown(tmp_path):
     assert session.calls[0]["json"] == {"package": {"name": "lodash", "ecosystem": "npm"}}
     assert len(session.calls) == 1
     assert vulns == [{"id": "GHSA-0001"}]
+
+
+# O11: the ID is escaped, so a strange ID stays one path segment (and is just "not found").
+def test_get_vuln_escapes_the_id_in_the_url(tmp_path):
+    client, session, _ = make_client(tmp_path, [FakeResponse(404, {})])
+
+    vuln, _ = client.get_vuln("GHSA-x/../../v1/query?x=1")
+
+    assert session.calls[0]["url"] == "https://api.osv.dev/v1/vulns/GHSA-x%2F..%2F..%2Fv1%2Fquery%3Fx%3D1"
+    assert vuln is None
