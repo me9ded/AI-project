@@ -8,7 +8,7 @@ import time
 from dataclasses import dataclass
 
 from src.retrieval.cache import SqliteCache, cached_fetch
-from src.retrieval.rate_limiter import with_retries
+from src.retrieval.rate_limiter import RetrievalError, with_retries
 
 NVD_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 TIMEOUT_SECONDS = 10
@@ -41,17 +41,19 @@ class NvdClient:
         """NVD's record for `cve_id`, or None if NVD has none. Returns (cve, is_stale)."""
 
         def fetch():
-            self.limiter.acquire()
-            response = with_retries(
-                lambda: self.session.get(
-                    NVD_URL, params={"cveId": cve_id}, headers=self.headers, timeout=TIMEOUT_SECONDS
-                ),
-                sleep=self.sleep,
-            )
-            return response.json()
+            response = with_retries(lambda: self._request(cve_id), sleep=self.sleep)
+            try:
+                return response.json()
+            except ValueError as error:  # a body that is not JSON counts as a failed request
+                raise RetrievalError(f"NVD sent a body that is not JSON: {error}") from error
 
         data, is_stale = cached_fetch(self.cache, f"nvd:cve:{cve_id}", fetch)
         return _parse_cve(data), is_stale
+
+    def _request(self, cve_id: str):
+        """One HTTP attempt. Every attempt, retries included, counts against NVD's limit."""
+        self.limiter.acquire()
+        return self.session.get(NVD_URL, params={"cveId": cve_id}, headers=self.headers, timeout=TIMEOUT_SECONDS)
 
 
 def _parse_cve(data: dict) -> NvdCve | None:
