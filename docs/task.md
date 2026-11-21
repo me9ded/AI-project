@@ -111,8 +111,8 @@ Mark a box only when its tests are green and committed.
 - [x] Offline check: `python -m scripts.warm_cache --check-offline` filled `cache/retrieval.sqlite3` and gave identical answers with no network. Results on 2026-11-20: Log4Shell 9 vulns (log4j-core → 2.25.4, log4j-api → 2.25.5), jinja2 6 (→ 3.1.6), jackson-databind 60 (→ 2.18.11). Stale-cache behaviour (`incomplete=True` after 24 h) is covered by unit tests
 
 ## 12. Hand-off
-- [ ] Every unit test green: `python -m pytest -v`
-- [ ] Write the README section "Task 2 – Retrieval" covering usage, `.env` and how to run the tests (notes: settings are read once per process, so restart after editing `.env`; get a free NVD key before demo day, since warming the Jackson input takes ~6 min without one and ~40 s with one)
+- [x] Every unit test green: `python -m pytest -v` (211 passed; live tests L1–L2 passed separately)
+- [x] README section "Task 2 – Retrieval": setup, `.env`, usage, demo cache warm-up, tests; notes on restarting after `.env` changes, the NVD key and the NVD notice. Usage example checked against the warm cache
 
 ---
 
