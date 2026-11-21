@@ -102,6 +102,7 @@ Mark a box only when its tests are green and committed.
 - [x] Red/Green: end to end through the real clients with a URL-routing fake session; warm cache works offline; injectable `clock`/`sleep` so tests never wait (E3–E5)
 - [x] Red/Green: public `retrieve()` with one shared service per process, `.env` read without touching `os.environ`, `NVD_NOTICE` exported (E6, E7)
 - [x] Refactor (test imports)
+- [x] Review fixes, Red/Green: default service built once under a lock (concurrent first use); `~` in `CVE_CACHE_PATH` means the home folder
 
 ## 11. Live checks and demo prep
 - [ ] `tests/integration/test_live.py`, cases L1–L2 (`python -m pytest -m live`)
@@ -110,7 +111,7 @@ Mark a box only when its tests are green and committed.
 
 ## 12. Hand-off
 - [ ] Every unit test green: `python -m pytest -v`
-- [ ] Write the README section "Task 2 – Retrieval" covering usage, `.env` and how to run the tests
+- [ ] Write the README section "Task 2 – Retrieval" covering usage, `.env` and how to run the tests (note: settings are read once per process, so restart after editing `.env`)
 
 ---
 
@@ -126,5 +127,5 @@ Mark a box only when its tests are green and committed.
 | kev_client | K1–K5 | ☑ 9 passing |
 | vulnerability_service | S1–S29 | ☑ 35 passing |
 | fixtures | sanity + refresh script | ☑ 14 passing |
-| entry point | E1–E7 | ☑ 18 passing |
+| entry point | E1–E7 | ☑ 20 passing |
 | live | L1–L2 | ☐ |

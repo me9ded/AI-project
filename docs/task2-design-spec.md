@@ -466,12 +466,12 @@ Clocks and `sleep` are fakes, so no test actually waits.
 ### 9.9a `test_retrieve.py` (entry point, no network)
 | ID | Case | Expect | Req |
 |----|------|--------|-----|
-| E1 | no settings; blank key; relative `CVE_CACHE_PATH` with another working folder; absolute path | no key; key `None`; path under the project root; path kept | NFR1, NFR8 |
+| E1 | no settings; blank key; relative `CVE_CACHE_PATH` with another working folder; `~/...`; absolute path | no key; key `None`; path under the project root; under the home folder; path kept | NFR1, NFR8 |
 | E2 | with / without `NVD_API_KEY` | NVD limiter 50 / 5 per 30 s, `apiKey` header only with a key; one session and one cache file for all clients | NFR3 |
 | E3 | Log4Shell through the real clients, a URL-routing fake session answering from the fixtures | 8 records, 44228 first (10.0, CRITICAL, KEV), upgrade 2.25.4, no warnings | FR1-FR11 |
 | E4 | same input again; then a new service with an offline session on the same cache | no new HTTP calls; identical result offline | NFR1, NFR2 |
 | E5 | rate-limit waits | go through the injected `clock`/`sleep` (no real waiting in tests) | NFR5 |
-| E6 | `default_service()` | built once; reads `.env` without changing `os.environ`; real environment variables win | NFR3, NFR8 |
+| E6 | `default_service()` | built once, also when 4 threads ask at the same moment (lock, not `lru_cache`); reads `.env` without changing `os.environ`; real environment variables win | NFR3, NFR8 |
 | E7 | `NVD_NOTICE` | NVD's attribution sentence, exported for the UI | NFR9 |
 
 ### 9.9 `tests/integration/test_live.py` (`@pytest.mark.live`, skipped by default)
