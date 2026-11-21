@@ -98,9 +98,10 @@ Mark a box only when its tests are green and committed.
 - [x] Review fixes, Red/Green: records grouped by ecosystem and version (S27, S28), malformed package entries skipped (S29)
 
 ## 10. Entry point – `src/retrieval/__init__.py`
-- [ ] Red: `retrieve()` builds the real clients (check the wiring with a fake session, no network)
-- [ ] Green: read `.env` (`NVD_API_KEY`, `CVE_CACHE_PATH`), build cache, limiter and clients, call the service. One shared NVD limiter per process; default cache path resolved from the project root
-- [ ] Refactor
+- [x] Red/Green: `read_settings()` (blank key = none, cache path from the project root) and `build_service()` (NVD limit 5 or 50 per 30 s, one session and cache) (E1, E2)
+- [x] Red/Green: end to end through the real clients with a URL-routing fake session; warm cache works offline; injectable `clock`/`sleep` so tests never wait (E3–E5)
+- [x] Red/Green: public `retrieve()` with one shared service per process, `.env` read without touching `os.environ`, `NVD_NOTICE` exported (E6, E7)
+- [x] Refactor (test imports)
 
 ## 11. Live checks and demo prep
 - [ ] `tests/integration/test_live.py`, cases L1–L2 (`python -m pytest -m live`)
@@ -125,4 +126,5 @@ Mark a box only when its tests are green and committed.
 | kev_client | K1–K5 | ☑ 9 passing |
 | vulnerability_service | S1–S29 | ☑ 35 passing |
 | fixtures | sanity + refresh script | ☑ 14 passing |
+| entry point | E1–E7 | ☑ 18 passing |
 | live | L1–L2 | ☐ |

@@ -95,7 +95,7 @@ NVD CPE configuration matching (OSV ranges are more precise for packages), and a
 ### 3.1 Files
 | File | Responsibility | Depends on |
 |------|----------------|------------|
-| `__init__.py` | `retrieve(extraction)`: wires the real objects together and calls the service | all |
+| `__init__.py` | `retrieve(extraction)` through one shared `default_service()` per process; `build_service(session, env, clock, sleep)`, `read_settings(env)`, `NVD_NOTICE` | all |
 | `vulnerability_models.py` | Pydantic models, `severity_from_score()`, `severity_from_label()` | pydantic |
 | `version_matcher.py` | `parse_version()`, `is_affected()`, `fixed_versions()`, `lowest_fix()` | packaging |
 | `cache.py` | `SqliteCache`, `cached_fetch()` | sqlite3, json |
@@ -462,6 +462,17 @@ Clocks and `sleep` are fakes, so no test actually waits.
 | S28 | the same name in npm and PyPI, one CVE affecting both | two records with their own fixed versions; upgrade clash reported as a warning | FR9 |
 | S29 | package entries missing `name` or `ecosystem` | skipped with a warning each, the rest still looked up | §7.2 |
 | S26 | one vuln has a fix above the installed version, another has none | upgrade from the fixable one; a warning names the unfixable CVE | FR8 |
+
+### 9.9a `test_retrieve.py` (entry point, no network)
+| ID | Case | Expect | Req |
+|----|------|--------|-----|
+| E1 | no settings; blank key; relative `CVE_CACHE_PATH` with another working folder; absolute path | no key; key `None`; path under the project root; path kept | NFR1, NFR8 |
+| E2 | with / without `NVD_API_KEY` | NVD limiter 50 / 5 per 30 s, `apiKey` header only with a key; one session and one cache file for all clients | NFR3 |
+| E3 | Log4Shell through the real clients, a URL-routing fake session answering from the fixtures | 8 records, 44228 first (10.0, CRITICAL, KEV), upgrade 2.25.4, no warnings | FR1-FR11 |
+| E4 | same input again; then a new service with an offline session on the same cache | no new HTTP calls; identical result offline | NFR1, NFR2 |
+| E5 | rate-limit waits | go through the injected `clock`/`sleep` (no real waiting in tests) | NFR5 |
+| E6 | `default_service()` | built once; reads `.env` without changing `os.environ`; real environment variables win | NFR3, NFR8 |
+| E7 | `NVD_NOTICE` | NVD's attribution sentence, exported for the UI | NFR9 |
 
 ### 9.9 `tests/integration/test_live.py` (`@pytest.mark.live`, skipped by default)
 | ID | Case | Expect |
