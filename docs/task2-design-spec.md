@@ -257,7 +257,7 @@ From 2.11.0 the same data gives **2.12.4**, because the 2.12 branch fixes for al
 | API answers 4xx other than 429 (`RetrievalError.status_code`) | bad input, not an outage: skip that item with a warning, `incomplete` unchanged |
 | Unknown advisory ID (`get_vuln` → `None`) | no record, warning, `incomplete` unchanged |
 | Empty extraction | empty result, no network calls |
-| NVD gives up (retries used) | skip NVD for the rest of this request, so a down NVD costs one timeout, not one per CVE |
+| A source gives up (retries used, nothing cached): OSV, NVD or KEV | skip that source for the rest of this request (cached answers can still be used), one warning per source. A dead API then costs one timeout per request, not one per CVE: 8 KEV lookups during a CISA outage would otherwise make 32 requests and could take ~17 minutes |
 | Unparsable version in OSV data (`ValueError`) | skip that vulnerability, warning |
 
 ### 7.3 Severity
@@ -293,6 +293,8 @@ CREATE TABLE IF NOT EXISTS cache (key TEXT PRIMARY KEY, value TEXT NOT NULL, fet
 | `set(key, value)` | stores the JSON with `fetched_at = clock()` (insert or replace) |
 
 Keys: `osv:query:{ecosystem}:{name}:{version or *}`, `osv:vuln:{id}`, `nvd:cve:{id}`, `kev:catalog`.
+Values are what each client needs, not always the raw reply: NVD stores the parsed `{found, id, summary, cvss_score, cwes}`
+(a reply with an unexpected shape is never cached), KEV stores only `{cve_ids}`, OSV stores `{vulns}` or the vuln itself.
 Default path: `cache/retrieval.sqlite3` **resolved from the project root** (not the current working directory),
 can be overridden with `CVE_CACHE_PATH`. `cache/` is git-ignored.
 
@@ -404,6 +406,7 @@ Clocks and `sleep` are fakes, so no test actually waits.
 | N3 | CVE-2021-44228 fixture | score 10.0, `cwes` contains `CWE-502`, English summary | FR5 |
 | N12 | fixture's non-CVSS `ssvcV203` metric | ignored, score still 10.0 | FR5 |
 | N13 | metrics with `cvssMetricV40` only, and with V40 + V30 | V40 score used in both | FR5 |
+| N14 | reply missing `cve` or a metric missing `cvssData` | `RetrievalError`; not cached (next call asks again); stale fallback applies | NFR2 |
 | N4 | metrics only V30 / only V2 | V30 / V2 score used | FR5 |
 | N5 | Primary and Secondary V31 metrics | Primary used | FR5 |
 | N6 | no metrics | score `None` | FR5/FR10 |
@@ -446,7 +449,7 @@ Clocks and `sleep` are fakes, so no test actually waits.
 | S23 | `advisory_ids` contains an ID OSV doesn't know (fake ID, as in the evaluation set) | no record, a warning, `incomplete` stays False | FR4, FR11 |
 | S21 | extraction names `Zope.Interface` (PyPI), OSV entry names `zope-interface` | entry matched (PEP 503 normalisation) | FR2 |
 | S17 | `sources` includes the NVD and OSV URLs, plus the KEV URL when `in_kev` | True | §7.4 |
-| S18 | NVD gives up on the first CVE | no further NVD calls in this request; the rest use cache or OSV data, one warning | NFR2 |
+| S18 | each source (OSV, NVD, KEV) gives up on its first call | no further calls to that source in this request; the rest use cache or other sources' data; one warning per source; `incomplete=True` | NFR2 |
 | S19 | OSV entry with an unparsable version | that vuln is skipped with a warning, the rest still returned | §7.2 |
 
 ### 9.9 `tests/integration/test_live.py` (`@pytest.mark.live`, skipped by default)

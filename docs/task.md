@@ -84,6 +84,7 @@ Mark a box only when its tests are green and committed.
 - [x] Red/Green: limiter on every attempt incl. retries (N9), bad JSON → `RetrievalError` (N10), stale fallback
 - [x] N11 decided from NVD's docs: 403 is not retried (status kept); the docs don't name the rate-limit status
 - [x] Refactor (shared `read_json()` for OSV and NVD)
+- [x] Review fix, Red/Green: parse replies before caching; an unexpected shape → `RetrievalError`, never cached (N14)
 
 ## 8. KEV client – `kev_client.py`
 - [x] Red/Green: lookup (also lower-case IDs) and daily caching (K1–K3)
@@ -95,7 +96,7 @@ Mark a box only when its tests are green and committed.
 - [ ] Green: package flow, NVD/KEV enrichment, severity, sources, upgrades, sorting
 - [ ] Red: matching and keys, cases S4–S10
 - [ ] Green: version double-check, advisory and CVE inputs, merge/de-duplicate
-- [ ] Red: failures and edge cases, cases S11–S15, S18 (stop calling NVD after it gives up), S19 (unparsable version)
+- [ ] Red: failures and edge cases, cases S11–S15, S18 (stop calling a source, OSV/NVD/KEV, for the rest of the request once it gives up), S19 (unparsable version)
 - [ ] Green: stale/missing data warnings, skips, empty input, FR11 check
 - [ ] Refactor: keep `retrieve()` a short list of named steps
 
@@ -123,7 +124,7 @@ Mark a box only when its tests are green and committed.
 | cache | C1–C8 | ☑ 10 passing |
 | rate_limiter | R1–R10 | ☑ 15 passing |
 | osv_client | O1–O12 | ☑ 19 passing |
-| nvd_client | N1–N13 | ☑ 17 passing |
+| nvd_client | N1–N14 | ☑ 21 passing |
 | kev_client | K1–K5 | ☑ 9 passing |
 | vulnerability_service | S1–S23 | ☐ |
 | fixtures | sanity + refresh script | ☑ 14 passing |
