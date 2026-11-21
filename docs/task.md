@@ -113,8 +113,6 @@ Mark a box only when its tests are green and committed.
 ## 12. Hand-off
 - [ ] Every unit test green: `python -m pytest -v`
 - [ ] Write the README section "Task 2 – Retrieval" covering usage, `.env` and how to run the tests
-- [ ] Share the spec §4.2 record format with Fouzi (Task 3) and the §4.1 input with Nibir (Task 1)
-- [ ] Push `brian` and open a PR to `main`, with Mariam reviewing and merging
 
 ---
 
