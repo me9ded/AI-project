@@ -79,9 +79,12 @@ Mark a box only when its tests are green and committed.
 - [x] Review fixes, Red/Green: empty version = unknown (O10), escaped advisory IDs (O11), paging stops on a repeated token or after 20 pages (O12)
 
 ## 7. NVD client – `nvd_client.py`
-- [ ] Red: `test_nvd_client.py`, cases N1–N13 (N10: bad JSON; N12: ignore non-CVSS metrics; N13: CVSS v4.0 between v3.1 and v3.0; N11: confirm NVD's 403 rate-limit answer, retry it)
-- [ ] Green: `NvdClient.get_cve()` → `NvdCve(id, summary, cvss_score, cwes)`
-- [ ] Refactor
+- [x] Red/Green: request, parsing, cache (N1–N3, N8, N12); a cache hit does not use the rate limit
+- [x] Red/Green: score order v3.1 → v4.0 → v3.0 → v2, Primary before Secondary, CWE placeholders dropped (N4–N7, N13)
+- [x] Red/Green: limiter on every attempt incl. retries (N9), bad JSON → `RetrievalError` (N10), stale fallback
+- [x] N11 decided from NVD's docs: 403 is not retried (status kept); the docs don't name the rate-limit status
+- [x] Refactor (shared `read_json()` for OSV and NVD)
+- [ ] Hand-off: tell Mariam (Task 4) the UI must show NVD's notice (spec NFR9)
 
 ## 8. KEV client – `kev_client.py`
 - [ ] Red: `test_kev_client.py`, cases K1–K4
@@ -123,7 +126,7 @@ Mark a box only when its tests are green and committed.
 | cache | C1–C8 | ☑ 10 passing |
 | rate_limiter | R1–R10 | ☑ 15 passing |
 | osv_client | O1–O12 | ☑ 19 passing |
-| nvd_client | N1–N13 | ☐ |
+| nvd_client | N1–N13 | ☑ 17 passing |
 | kev_client | K1–K4 | ☐ |
 | vulnerability_service | S1–S23 | ☐ |
 | fixtures | sanity + refresh script | ☑ 14 passing |

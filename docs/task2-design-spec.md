@@ -62,6 +62,7 @@ NVD CPE configuration matching (OSV ranges are more precise for packages), and a
 | NFR6 | **Privacy:** only package names, versions and vulnerability IDs leave the machine, never the user's raw text. |
 | NFR7 | **Platform:** Python 3.11+. Runtime dependencies: `requests`, `pydantic` (v2), `packaging`, `python-dotenv`. Test dependency: `pytest`. |
 | NFR8 | **Secrets:** read `NVD_API_KEY` from `.env`, which is never committed. Ship `.env.example` with the key blank. |
+| NFR9 | **NVD notice:** NVD asks apps that use its API to show "This product uses data from the NVD API but is not endorsed or certified by the NVD." Task 4 (UI) shows it; Task 2 passes it on. |
 
 ---
 
@@ -100,7 +101,7 @@ NVD CPE configuration matching (OSV ranges are more precise for packages), and a
 | `cache.py` | `SqliteCache`, `cached_fetch()` | sqlite3, json |
 | `rate_limiter.py` | `RateLimiter`, `with_retries()`, `RetrievalError` | requests (exceptions only) |
 | `osv_client.py` | `OsvClient(session, cache, sleep)`: `query_package()` → `(vulns, is_stale)`, `get_vuln()` → `(vuln or None, is_stale)` | cache, rate_limiter |
-| `nvd_client.py` | `NvdClient.get_cve()` → `NvdCve` | cache, rate_limiter |
+| `nvd_client.py` | `NvdClient(session, cache, limiter, api_key, sleep)`: `get_cve()` → `(NvdCve or None, is_stale)` | cache, rate_limiter |
 | `kev_client.py` | `KevClient.is_exploited()` | cache, rate_limiter |
 | `vulnerability_service.py` | `VulnerabilityService.retrieve()` | all clients, version_matcher, models |
 
@@ -410,7 +411,7 @@ Clocks and `sleep` are fakes, so no test actually waits.
 | N8 | `totalResults: 0` | `None` | FR5 |
 | N9 | limiter `acquire()` called on each request | yes | NFR3 |
 | N10 | response body is not valid JSON | `RetrievalError` | NFR2 |
-| N11 | HTTP 403 (NVD's rate-limit answer, to confirm with the live test) | retried like 429 | NFR4 |
+| N11 | HTTP 403 | **not** retried; `RetrievalError` with `status_code` 403, one request. NVD's docs (developers/start-here, checked 2026-11-20) don't name the rate-limit status, and 403 also means a bad API key | NFR4 |
 
 ### 9.7 `test_kev_client.py`
 | ID | Case | Expect | Req |
