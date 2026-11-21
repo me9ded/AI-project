@@ -14,7 +14,7 @@ from src.retrieval.rate_limiter import RetrievalError, with_retries
 QUERY_URL = "https://api.osv.dev/v1/query"
 VULN_URL = "https://api.osv.dev/v1/vulns/{id}"
 TIMEOUT_SECONDS = 10
-MAX_PAGES = 0  # stub value, set in the green step
+MAX_PAGES = 20  # far more than OSV ever sends; guards against a looping server
 
 
 class OsvClient:
@@ -36,8 +36,14 @@ class OsvClient:
             vulns = []
             page = self._post(body)
             vulns.extend(page.get("vulns", []))
+            pages_read, seen_tokens = 1, set()
             while page.get("next_page_token"):  # OSV pages long results
-                page = self._post({**body, "page_token": page["next_page_token"]})
+                token = page["next_page_token"]
+                if token in seen_tokens or pages_read >= MAX_PAGES:
+                    raise RetrievalError(f"OSV paging did not end for {name} ({ecosystem})")
+                seen_tokens.add(token)
+                page = self._post({**body, "page_token": token})
+                pages_read += 1
                 vulns.extend(page.get("vulns", []))
             return {"vulns": vulns}
 
