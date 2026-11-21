@@ -5,7 +5,7 @@ import requests
 
 from src.retrieval.cache import SqliteCache
 from src.retrieval.rate_limiter import RetrievalError
-from src.retrieval.osv_client import OsvClient
+from src.retrieval.osv_client import MAX_PAGES, OsvClient
 from tests.unit.fakes import FakeClock, FakeResponse, FakeSession, FakeSleep, load_fixture
 
 LOG4J_CORE = "org.apache.logging.log4j:log4j-core"
@@ -209,3 +209,26 @@ def test_get_vuln_escapes_the_id_in_the_url(tmp_path):
 
     assert session.calls[0]["url"] == "https://api.osv.dev/v1/vulns/GHSA-x%2F..%2F..%2Fv1%2Fquery%3Fx%3D1"
     assert vuln is None
+
+
+
+# O12: paging must end. A repeated token or too many pages is a failed request,
+# so the stale-cache fallback still applies.
+def test_repeated_page_token_raises_instead_of_looping(tmp_path):
+    same_token = [FakeResponse(200, {"vulns": [], "next_page_token": "same"}) for _ in range(3)]
+    client, session, _ = make_client(tmp_path, same_token)
+
+    with pytest.raises(RetrievalError):
+        client.query_package("jinja2", "PyPI", "2.10")
+
+    assert len(session.calls) == 2
+
+
+def test_too_many_pages_raises(tmp_path):
+    pages = [FakeResponse(200, {"vulns": [], "next_page_token": f"t{n}"}) for n in range(MAX_PAGES + 5)]
+    client, session, _ = make_client(tmp_path, pages)
+
+    with pytest.raises(RetrievalError):
+        client.query_package("jinja2", "PyPI", "2.10")
+
+    assert len(session.calls) == MAX_PAGES

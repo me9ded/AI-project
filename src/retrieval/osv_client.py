@@ -14,6 +14,7 @@ from src.retrieval.rate_limiter import RetrievalError, with_retries
 QUERY_URL = "https://api.osv.dev/v1/query"
 VULN_URL = "https://api.osv.dev/v1/vulns/{id}"
 TIMEOUT_SECONDS = 10
+MAX_PAGES = 0  # stub value, set in the green step
 
 
 class OsvClient:
