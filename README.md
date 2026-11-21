@@ -21,11 +21,23 @@ returns one record per vulnerability for Task 3's Neo4j graph.
 
 Python 3.11 or newer.
 
-```bash
-python -m venv .venv
-.venv\Scripts\activate          # Windows  (macOS/Linux: source .venv/bin/activate)
-pip install -r requirements.txt
-```
+1. Create a virtual environment:
+   ```
+   python -m venv .venv
+   ```
+2. Activate it, with the line for your shell:
+
+   | Shell | Command |
+   |-------|---------|
+   | PowerShell | `.venv\Scripts\Activate.ps1` |
+   | Command Prompt | `.venv\Scripts\activate.bat` |
+   | Git Bash | `source .venv/Scripts/activate` |
+   | macOS / Linux | `source .venv/bin/activate` |
+
+3. Install the dependencies:
+   ```
+   pip install -r requirements.txt
+   ```
 
 Copy `.env.example` to `.env` and fill it in. `.env` is never committed.
 
@@ -51,7 +63,7 @@ result = retrieve(extraction)       # RetrievalResult (Pydantic)
 
 for record in result.records:       # highest CVSS score first
     print(record.id, record.severity, record.cvss_score, record.in_kev)
-print(result.recommended_upgrades)  # {"org.apache.logging.log4j:log4j-core": "2.25.4"}
+print(result.recommended_upgrades)  # {"org.apache.logging.log4j:log4j-core": "2.25.4"} as of November 2026
 print(result.incomplete, result.warnings)
 
 data = result.model_dump()          # plain dict for Task 3 or the API

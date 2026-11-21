@@ -45,7 +45,7 @@ NVD CPE configuration matching (OSV ranges are more precise for packages), and a
 | FR5 | Enrich every CVE ID, whether found through OSV or given in `cve_ids`, from NVD: CVSS base score, CWE IDs and English description. Score order: v3.1 → v4.0 → v3.0 → v2 (first one present wins; v4.0 uses the same rating bands). |
 | FR6 | Set `in_kev = True` for every CVE listed in the CISA KEV catalog. |
 | FR7 | Version matcher: decide whether a version is inside OSV `ECOSYSTEM`/`SEMVER` ranges for PyPI, npm and Maven (section 6). |
-| FR8 | For each package, work out the lowest version that fixes **all** of its known vulnerabilities (demo: log4j-core 2.14.1 → 2.17.1). |
+| FR8 | For each package, work out the lowest version that fixes **all** of its known vulnerabilities (demo: log4j-core 2.14.1 → **2.25.4** for all 8 vulnerabilities known in November 2026; 2.17.1 only fixes the 4 CVEs from 2021, see §6.3). |
 | FR9 | Produce one record per vulnerability **per package version** (records are grouped by CVE, ecosystem, normalised name and version), keyed by CVE ID, or by the OSV ID when there is no CVE alias. The same vulnerability reached through two paths gives one record; the same CVE in two input packages gives one record for each (a record has one `package_name`). A CVE or advisory with no package merges into an existing record for that ID. |
 | FR10 | Severity rules (section 7.3): CVSS score → FIRST rating. If there is no score, use the OSV label. If there is no label, use `PENDING`. |
 | FR11 | Never invent identifiers. Every ID in the output comes from the input or from an API response. |
@@ -462,7 +462,7 @@ Clocks and `sleep` are fakes, so no test actually waits.
 | S29 | package entries missing `name` or `ecosystem` | skipped with a warning each, the rest still looked up | §7.2 |
 | S26 | one vuln has a fix above the installed version, another has none | upgrade from the fixable one; a warning names the unfixable CVE | FR8 |
 
-### 9.9a `test_retrieve.py` (entry point, no network)
+### 9.9 `test_retrieve.py` (entry point, no network)
 | ID | Case | Expect | Req |
 |----|------|--------|-----|
 | E1 | no settings; blank key; relative `CVE_CACHE_PATH` with another working folder; `~/...`; absolute path | no key; key `None`; path under the project root; under the home folder; path kept | NFR1, NFR8 |
@@ -473,7 +473,7 @@ Clocks and `sleep` are fakes, so no test actually waits.
 | E6 | `default_service()` | built once, also when 4 threads ask at the same moment (lock, not `lru_cache`); reads `.env` without changing `os.environ`; real environment variables win | NFR3, NFR8 |
 | E7 | `NVD_NOTICE` | NVD's attribution sentence, exported for the UI | NFR9 |
 
-### 9.9 `tests/integration/test_live.py` (`@pytest.mark.live`, skipped by default)
+### 9.10 `tests/integration/test_live.py` (`@pytest.mark.live`, skipped by default)
 | ID | Case | Expect |
 |----|------|--------|
 | L1 | `retrieve()` on the Log4Shell extraction with the real APIs | the 4 demo CVEs present (OSV may return newer ones too), 44228 CVSS 10.0 and in KEV, upgrade ≥ 2.17.1 |
@@ -481,8 +481,15 @@ Clocks and `sleep` are fakes, so no test actually waits.
 
 Run on 2026-11-20 without an NVD key: both passed in 63 s (NVD rate-limit waits).
 
-### 9.10 Build order (one Red-Green-Refactor cycle each, two commits per cycle)
-models → version_matcher → cache → rate_limiter → osv_client → nvd_client → kev_client → vulnerability_service → `retrieve()` + live tests → `scripts/warm_cache.py`.
+### 9.11 Supporting tests (fixtures and scripts)
+| File | What it checks |
+|------|----------------|
+| `test_fixtures.py` (9) | the saved API responses kept the facts other tests rely on; on real OSV data the matcher finds 2.14.1 affected, 2.17.1 fixes the 4 CVEs from 2021 and 2.25.4 fixes all 8; OSV splits a package into per-branch entries |
+| `test_refresh_fixtures.py` (5) | the trimming rules of `scripts/refresh_fixtures.py` (package filter, text limits, kept fields, KEV excerpt) |
+| `test_warm_cache.py` (10) | the demo inputs, the summary line, the offline comparison, exit code 1 with "Cache NOT fully filled" after an incomplete warm-up, and running the script as a file |
+
+### 9.12 Build order (one Red-Green-Refactor cycle each, two commits per cycle)
+models → version_matcher → cache → rate_limiter → fixtures + `scripts/refresh_fixtures.py` → osv_client → nvd_client → kev_client → vulnerability_service → `retrieve()` entry point → live tests + `scripts/warm_cache.py`.
 
 ---
 

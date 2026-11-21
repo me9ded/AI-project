@@ -1,4 +1,4 @@
-"""Live checks against the real OSV.dev, NVD and CISA KEV APIs (design spec 9.9, L1-L2).
+"""Live checks against the real OSV.dev, NVD and CISA KEV APIs (design spec 9.10, L1-L2).
 
 Skipped by default. Run them with:
 
