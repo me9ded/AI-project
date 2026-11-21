@@ -86,9 +86,9 @@ Mark a box only when its tests are green and committed.
 - [x] Refactor (shared `read_json()` for OSV and NVD)
 
 ## 8. KEV client – `kev_client.py`
-- [ ] Red: `test_kev_client.py`, cases K1–K4
-- [ ] Green: `KevClient.is_exploited()`
-- [ ] Refactor
+- [x] Red/Green: lookup (also lower-case IDs) and daily caching (K1–K3)
+- [x] Red/Green: bad JSON and a changed feed format → `RetrievalError`; K4 and stale fallback (K5)
+- [x] Refactor (download in its own method)
 
 ## 9. Service – `vulnerability_service.py`
 - [ ] Red: happy path, cases S1–S3, S16, S17, S20–S23 (S22: OSV 400 = bad input, not an outage; S23: unknown advisory ID; Log4Shell from the real fixture: 8 vulns, upgrade 2.25.4; merge per-branch entries; PEP 503 names for PyPI)
@@ -124,7 +124,7 @@ Mark a box only when its tests are green and committed.
 | rate_limiter | R1–R10 | ☑ 15 passing |
 | osv_client | O1–O12 | ☑ 19 passing |
 | nvd_client | N1–N13 | ☑ 17 passing |
-| kev_client | K1–K4 | ☐ |
+| kev_client | K1–K5 | ☑ 9 passing |
 | vulnerability_service | S1–S23 | ☐ |
 | fixtures | sanity + refresh script | ☑ 14 passing |
 | live | L1–L2 | ☐ |

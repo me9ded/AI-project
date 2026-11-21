@@ -102,7 +102,7 @@ NVD CPE configuration matching (OSV ranges are more precise for packages), and a
 | `rate_limiter.py` | `RateLimiter`, `with_retries()`, `RetrievalError` | requests (exceptions only) |
 | `osv_client.py` | `OsvClient(session, cache, sleep)`: `query_package()` → `(vulns, is_stale)`, `get_vuln()` → `(vuln or None, is_stale)` | cache, rate_limiter |
 | `nvd_client.py` | `NvdClient(session, cache, limiter, api_key, sleep)`: `get_cve()` → `(NvdCve or None, is_stale)` | cache, rate_limiter |
-| `kev_client.py` | `KevClient.is_exploited()` | cache, rate_limiter |
+| `kev_client.py` | `KevClient(session, cache, sleep)`: `is_exploited()` → `(bool, is_stale)`; caches only the CVE IDs | cache, rate_limiter |
 | `vulnerability_service.py` | `VulnerabilityService.retrieve()` | all clients, version_matcher, models |
 
 ---
@@ -416,10 +416,11 @@ Clocks and `sleep` are fakes, so no test actually waits.
 ### 9.7 `test_kev_client.py`
 | ID | Case | Expect | Req |
 |----|------|--------|-----|
-| K1 | CVE-2021-44228 | True | FR6 |
-| K2 | CVE-0000-0000 | False | FR6 |
-| K3 | ten lookups | one download (cached) | FR6/NFR1 |
+| K1 | CVE-2021-44228 (also lower-case) | `(True, False)` | FR6 |
+| K2 | CVE-0000-0000 | `(False, False)` | FR6 |
+| K3 | ten lookups; again after a day | one download; a second download after the TTL | FR6/NFR1 |
 | K4 | download fails, nothing cached | `RetrievalError` (the service treats it as not in KEV and warns) | NFR2 |
+| K5 | body not JSON; feed without `vulnerabilities`; CISA down with a stale catalog | `RetrievalError`, `RetrievalError`, `(True, True)` | NFR2 |
 
 ### 9.8 `test_vulnerability_service.py` (fake clients)
 | ID | Case | Expect | Req |
