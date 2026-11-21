@@ -87,9 +87,13 @@ def default_service() -> VulnerabilityService:
     global _default_service
     with _default_service_lock:
         if _default_service is None:
-            env = {**dotenv_values(ENV_FILE), **os.environ}  # read .env without changing os.environ
-            _default_service = build_service(requests.Session(), env)
+            _default_service = build_service(requests.Session(), load_env())
         return _default_service
+
+
+def load_env() -> dict:
+    """Settings from .env, with real environment variables winning. os.environ is not changed."""
+    return {**dotenv_values(ENV_FILE), **os.environ}
 
 
 def reset_default_service() -> None:
