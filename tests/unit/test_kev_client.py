@@ -1,6 +1,10 @@
 """Tests for src/retrieval/kev_client.py (design spec section 5, test IDs K1-K4)."""
 
+import pytest
+import requests
+
 from src.retrieval.cache import SqliteCache
+from src.retrieval.rate_limiter import RetrievalError
 from src.retrieval.kev_client import KevClient
 from tests.unit.fakes import FakeClock, FakeResponse, FakeSession, FakeSleep, load_fixture
 
@@ -65,3 +69,46 @@ def test_catalog_downloaded_again_after_a_day(tmp_path):
     client.is_exploited("CVE-2021-44228")
 
     assert len(session.calls) == 2
+
+
+# ---------------------------------------------------------------------------
+# Failures
+# ---------------------------------------------------------------------------
+
+OFFLINE = [requests.ConnectionError("offline")] * 4  # first try + 3 retries
+
+
+# K4: CISA is down and nothing is cached -> RetrievalError (the service then warns
+# and treats the CVE as not known to be exploited).
+def test_raises_when_cisa_is_down_and_nothing_cached(tmp_path):
+    client, _ = make_client(tmp_path, OFFLINE)
+
+    with pytest.raises(RetrievalError):
+        client.is_exploited("CVE-2021-44228")
+
+
+def test_falls_back_to_stale_catalog_when_cisa_is_down(tmp_path):
+    clock = FakeClock()
+    client, _ = make_client(tmp_path, [kev_response(), *OFFLINE], clock)
+    client.is_exploited("CVE-2021-44228")
+    clock.advance(24 * 60 * 60 * 3)
+
+    exploited, is_stale = client.is_exploited("CVE-2021-44228")
+
+    assert exploited is True
+    assert is_stale is True
+
+
+def test_bad_json_raises_retrieval_error(tmp_path):
+    client, _ = make_client(tmp_path, [FakeResponse(200, ValueError("Expecting value"))])
+
+    with pytest.raises(RetrievalError):
+        client.is_exploited("CVE-2021-44228")
+
+
+# If CISA ever changes the feed's format, that is a retrieval failure, not a crash.
+def test_unexpected_feed_format_raises_retrieval_error(tmp_path):
+    client, _ = make_client(tmp_path, [FakeResponse(200, {"title": "CISA Catalog", "entries": []})])
+
+    with pytest.raises(RetrievalError):
+        client.is_exploited("CVE-2021-44228")
