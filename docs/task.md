@@ -76,6 +76,7 @@ Mark a box only when its tests are green and committed.
 - [x] Red/Green: `RetrievalError.status_code` in `rate_limiter.py` (R10)
 - [x] Red/Green: stale fallback (O6), bad JSON → `RetrievalError` (O8), unknown advisory → `None` (O9)
 - [x] Refactor (`_post`/`_get` helpers, plainer paging loop)
+- [x] Review fixes, Red/Green: empty version = unknown (O10), escaped advisory IDs (O11), paging stops on a repeated token or after 20 pages (O12)
 
 ## 7. NVD client – `nvd_client.py`
 - [ ] Red: `test_nvd_client.py`, cases N1–N13 (N10: bad JSON; N12: ignore non-CVSS metrics; N13: CVSS v4.0 between v3.1 and v3.0; N11: confirm NVD's 403 rate-limit answer, retry it)
@@ -88,7 +89,7 @@ Mark a box only when its tests are green and committed.
 - [ ] Refactor
 
 ## 9. Service – `vulnerability_service.py`
-- [ ] Red: happy path, cases S1–S3, S16, S17, S20, S21 (Log4Shell from the real fixture: 8 vulns, upgrade 2.25.4; merge per-branch entries; PEP 503 names for PyPI)
+- [ ] Red: happy path, cases S1–S3, S16, S17, S20–S23 (S22: OSV 400 = bad input, not an outage; S23: unknown advisory ID; Log4Shell from the real fixture: 8 vulns, upgrade 2.25.4; merge per-branch entries; PEP 503 names for PyPI)
 - [ ] Green: package flow, NVD/KEV enrichment, severity, sources, upgrades, sorting
 - [ ] Red: matching and keys, cases S4–S10
 - [ ] Green: version double-check, advisory and CVE inputs, merge/de-duplicate
@@ -121,9 +122,9 @@ Mark a box only when its tests are green and committed.
 | version_matcher | V1–V16 | ☑ 34 passing |
 | cache | C1–C8 | ☑ 10 passing |
 | rate_limiter | R1–R10 | ☑ 15 passing |
-| osv_client | O1–O9 | ☑ 15 passing |
+| osv_client | O1–O12 | ☑ 19 passing |
 | nvd_client | N1–N13 | ☐ |
 | kev_client | K1–K4 | ☐ |
-| vulnerability_service | S1–S21 | ☐ |
+| vulnerability_service | S1–S23 | ☐ |
 | fixtures | sanity + refresh script | ☑ 14 passing |
 | live | L1–L2 | ☐ |

@@ -253,6 +253,8 @@ From 2.11.0 the same data gives **2.12.4**, because the 2.12 branch fixes for al
 | API fails, nothing cached | skip that lookup, `incomplete = True`, warning `"<source> unavailable for <key>"` |
 | NVD unknown CVE (`totalResults: 0`) | no enrichment, severity falls back to OSV, no warning |
 | Ecosystem `unknown` / unparsable version | skip the package, warning |
+| API answers 4xx other than 429 (`RetrievalError.status_code`) | bad input, not an outage: skip that item with a warning, `incomplete` unchanged |
+| Unknown advisory ID (`get_vuln` → `None`) | no record, warning, `incomplete` unchanged |
 | Empty extraction | empty result, no network calls |
 | NVD gives up (retries used) | skip NVD for the rest of this request, so a down NVD costs one timeout, not one per CVE |
 | Unparsable version in OSV data (`ValueError`) | skip that vulnerability, warning |
@@ -388,6 +390,9 @@ Clocks and `sleep` are fakes, so no test actually waits.
 | O6 | HTTP fails, stale cache exists | stale data, `is_stale=True` | NFR2 |
 | O7 | `get_vuln("GHSA-jfh8-c2jp-5v3q")` | GET `/v1/vulns/GHSA-jfh8-c2jp-5v3q`, aliases incl. CVE-2021-44228 | FR4 |
 | O8 | response body is not valid JSON | `RetrievalError` (so `cached_fetch` can fall back to stale data) | NFR2 |
+| O10 | `version=""` | treated like `None`: no `version` in the body, same cache entry | FR3 |
+| O11 | `get_vuln("GHSA-x/../../v1/query?x=1")` | ID escaped into one path segment (`%2F`, `%3F`) | NFR6 |
+| O12 | the same `next_page_token` twice, or more than `MAX_PAGES` (20) pages | `RetrievalError` (stale fallback still applies) | NFR2 |
 | O9 | `get_vuln` of an ID OSV doesn't know (HTTP 404) | `(None, False)`, not an error: the service skips it without marking the result incomplete | FR4, FR11 |
 
 ### 9.6 `test_nvd_client.py`
@@ -435,6 +440,8 @@ Clocks and `sleep` are fakes, so no test actually waits.
 | S15 | every output ID (`id` + `aliases`) is in the input or in a fake response | True | FR11 |
 | S16 | records sorted by score, highest first, `None` last | True | §4.2 |
 | S20 | one vuln with several `affected` entries for the package (per-branch) | entries merged; 2.14.1 matched by the third entry | FR2 |
+| S22 | OSV answers 400 for a package (bad input, e.g. an invalid name) | package skipped with a warning naming it; **not** reported as "OSV unavailable", `incomplete` stays False | §7.2 |
+| S23 | `advisory_ids` contains an ID OSV doesn't know (fake ID, as in the evaluation set) | no record, a warning, `incomplete` stays False | FR4, FR11 |
 | S21 | extraction names `Zope.Interface` (PyPI), OSV entry names `zope-interface` | entry matched (PEP 503 normalisation) | FR2 |
 | S17 | `sources` includes the NVD and OSV URLs, plus the KEV URL when `in_kev` | True | §7.4 |
 | S18 | NVD gives up on the first CVE | no further NVD calls in this request; the rest use cache or OSV data, one warning | NFR2 |
