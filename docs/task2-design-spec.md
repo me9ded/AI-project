@@ -47,7 +47,7 @@ NVD CPE configuration matching (OSV ranges are more precise for packages), and a
 | FR6 | Set `in_kev = True` for every CVE listed in the CISA KEV catalog. |
 | FR7 | Version matcher: decide whether a version is inside OSV `ECOSYSTEM`/`SEMVER` ranges for PyPI, npm and Maven (section 6). |
 | FR8 | For each package, work out the lowest version that fixes **all** of its known vulnerabilities (demo: log4j-core 2.14.1 → 2.17.1). |
-| FR9 | Produce one record per vulnerability, keyed by CVE ID, or by the OSV ID when there is no CVE alias. The same vulnerability reached through two paths gives one record. |
+| FR9 | Produce one record per vulnerability **per package**, keyed by CVE ID, or by the OSV ID when there is no CVE alias. The same vulnerability reached through two paths gives one record; the same CVE in two input packages gives one record for each (a record has one `package_name`). A CVE or advisory with no package merges into an existing record for that ID. |
 | FR10 | Severity rules (section 7.3): CVSS score → FIRST rating. If there is no score, use the OSV label. If there is no label, use `PENDING`. |
 | FR11 | Never invent identifiers. Every ID in the output comes from the input or from an API response. |
 
@@ -103,7 +103,7 @@ NVD CPE configuration matching (OSV ranges are more precise for packages), and a
 | `osv_client.py` | `OsvClient(session, cache, sleep)`: `query_package()` → `(vulns, is_stale)`, `get_vuln()` → `(vuln or None, is_stale)` | cache, rate_limiter |
 | `nvd_client.py` | `NvdClient(session, cache, limiter, api_key, sleep)`: `get_cve()` → `(NvdCve or None, is_stale)` | cache, rate_limiter |
 | `kev_client.py` | `KevClient(session, cache, sleep)`: `is_exploited()` → `(bool, is_stale)`; caches only the CVE IDs | cache, rate_limiter |
-| `vulnerability_service.py` | `VulnerabilityService.retrieve()` | all clients, version_matcher, models |
+| `vulnerability_service.py` | `VulnerabilityService(osv, nvd, kev).retrieve(extraction)` → `RetrievalResult`; also `package_entry()`, `normalise_name()` | all clients, version_matcher, models |
 
 ---
 
@@ -239,7 +239,9 @@ From 2.11.0 the same data gives **2.12.4**, because the 2.12 branch fixes for al
    - if there is no version, set `affected = None`.
    - collect `fixed_versions` from that entry's `fixed` events.
 2. **Advisory IDs.** For each `advisory_id`, call `osv.get_vuln(id)` and add it the same way, without package or version data unless the OSV entry names exactly one package.
-3. **CVE IDs from the input.** Make sure a record exists for each one (package fields `None`).
+3. **CVE IDs from the input.** Merge into an existing record for that CVE, or start one with package fields `None`.
+   After step 5, a CVE that no source knows (no OSV entry, NVD returns nothing) is dropped with a warning:
+   a made-up ID in the input must not become a record.
 4. **Key and merge.** A record's key is its first CVE alias in sorted order, or the OSV ID if it has none. If two OSV entries share a key (for example the GHSA and PYSEC entries for the same CVE), merge their aliases and fixed versions and keep the first summary.
 5. **Enrich.** For each key that starts with `CVE-`, call `nvd.get_cve()` and `kev.is_exploited()`.
 6. **Severity and sources** (sections 7.3 and 7.4).
@@ -257,7 +259,7 @@ From 2.11.0 the same data gives **2.12.4**, because the 2.12 branch fixes for al
 | API answers 4xx other than 429 (`RetrievalError.status_code`) | bad input, not an outage: skip that item with a warning, `incomplete` unchanged |
 | Unknown advisory ID (`get_vuln` → `None`) | no record, warning, `incomplete` unchanged |
 | Empty extraction | empty result, no network calls |
-| A source gives up (retries used, nothing cached): OSV, NVD or KEV | skip that source for the rest of this request (cached answers can still be used), one warning per source. A dead API then costs one timeout per request, not one per CVE: 8 KEV lookups during a CISA outage would otherwise make 32 requests and could take ~17 minutes |
+| A source gives up (retries used, nothing cached): OSV, NVD or KEV | skip that source for the rest of this request, one warning per source. (Simplification: later items are skipped even if their answer is cached; using the cache alone would need a cache-only mode in each client.) A dead API then costs one timeout per request, not one per CVE: 8 KEV lookups during a CISA outage would otherwise make 32 requests and could take ~17 minutes |
 | Unparsable version in OSV data (`ValueError`) | skip that vulnerability, warning |
 
 ### 7.3 Severity
@@ -451,6 +453,9 @@ Clocks and `sleep` are fakes, so no test actually waits.
 | S17 | `sources` includes the NVD and OSV URLs, plus the KEV URL when `in_kev` | True | §7.4 |
 | S18 | each source (OSV, NVD, KEV) gives up on its first call | no further calls to that source in this request; the rest use cache or other sources' data; one warning per source; `incomplete=True` | NFR2 |
 | S19 | OSV entry with an unparsable version | that vuln is skipped with a warning, the rest still returned | §7.2 |
+| S24 | `cve_ids` contains a CVE that neither OSV nor NVD knows | no record, a warning, `incomplete` stays False | FR11 |
+| S25 | OSV returns a vuln that does not list the queried package under any spelling | skipped with a warning | FR2 |
+| S26 | one vuln has a fix above the installed version, another has none | upgrade from the fixable one; a warning names the unfixable CVE | FR8 |
 
 ### 9.9 `tests/integration/test_live.py` (`@pytest.mark.live`, skipped by default)
 | ID | Case | Expect |

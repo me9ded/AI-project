@@ -67,7 +67,6 @@ Mark a box only when its tests are green and committed.
 - [x] Trim large fields so each file stays readable; sources and trimming rules in `tests/fixtures/t2/README.md`
 - [x] Red/Green: `test_fixtures.py` sanity checks (9 tests), incl. real OSV data → 2.14.1 affected, 2.17.1 fixes the 4 demo CVEs, 2.25.4 fixes all 8
 - [x] Review fix: `scripts/refresh_fixtures.py` (download + trim, 5 tests); reproduces the committed fixtures exactly
-- [ ] Service (Task 9): switch `test_fixtures.py`'s `package_entry` helper to the service's merge helper so there is one version
 
 ## 6. OSV client – `osv_client.py`
 - [x] Red: `test_osv_client.py`, cases O1–O3, O5, O7
@@ -92,13 +91,10 @@ Mark a box only when its tests are green and committed.
 - [x] Refactor (download in its own method)
 
 ## 9. Service – `vulnerability_service.py`
-- [ ] Red: happy path, cases S1–S3, S16, S17, S20–S23 (S22: OSV 400 = bad input, not an outage; S23: unknown advisory ID; Log4Shell from the real fixture: 8 vulns, upgrade 2.25.4; merge per-branch entries; PEP 503 names for PyPI)
-- [ ] Green: package flow, NVD/KEV enrichment, severity, sources, upgrades, sorting
-- [ ] Red: matching and keys, cases S4–S10
-- [ ] Green: version double-check, advisory and CVE inputs, merge/de-duplicate
-- [ ] Red: failures and edge cases, cases S11–S15, S18 (stop calling a source, OSV/NVD/KEV, for the rest of the request once it gives up), S19 (unparsable version)
-- [ ] Green: stale/missing data warnings, skips, empty input, FR11 check
-- [ ] Refactor: keep `retrieve()` a short list of named steps
+- [x] Red/Green: happy path from the real Log4Shell fixture (S1–S3, S16, S17, S20, S21): 8 records, upgrade 2.25.4, per-branch entries merged, PEP 503 names
+- [x] Red/Green: advisory IDs, CVE IDs, record keys (S4–S10): one record per vulnerability per package
+- [x] Red/Green: failures (S11–S15, S18, S19, S22–S26): stale data, outages skip a source for the request, 4xx = bad input, unknown IDs and versions skipped with warnings
+- [x] Refactor: fixture checks use the service's `package_entry` (one merge helper)
 
 ## 10. Entry point – `src/retrieval/__init__.py`
 - [ ] Red: `retrieve()` builds the real clients (check the wiring with a fake session, no network)
@@ -126,6 +122,6 @@ Mark a box only when its tests are green and committed.
 | osv_client | O1–O12 | ☑ 19 passing |
 | nvd_client | N1–N14 | ☑ 21 passing |
 | kev_client | K1–K5 | ☑ 9 passing |
-| vulnerability_service | S1–S23 | ☐ |
+| vulnerability_service | S1–S26 | ☑ 31 passing |
 | fixtures | sanity + refresh script | ☑ 14 passing |
 | live | L1–L2 | ☐ |
