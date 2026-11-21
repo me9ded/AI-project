@@ -84,7 +84,6 @@ Mark a box only when its tests are green and committed.
 - [x] Red/Green: limiter on every attempt incl. retries (N9), bad JSON → `RetrievalError` (N10), stale fallback
 - [x] N11 decided from NVD's docs: 403 is not retried (status kept); the docs don't name the rate-limit status
 - [x] Refactor (shared `read_json()` for OSV and NVD)
-- [ ] Hand-off: tell Mariam (Task 4) the UI must show NVD's notice (spec NFR9)
 
 ## 8. KEV client – `kev_client.py`
 - [ ] Red: `test_kev_client.py`, cases K1–K4
