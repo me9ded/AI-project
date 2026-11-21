@@ -187,3 +187,15 @@ def test_get_vuln_raises_when_osv_is_down_and_nothing_cached(tmp_path):
 
     with pytest.raises(RetrievalError):
         client.get_vuln("GHSA-jfh8-c2jp-5v3q")
+
+
+# O10: an empty version means "unknown", exactly like None (same request, same cache entry).
+def test_empty_version_is_treated_as_unknown(tmp_path):
+    client, session, _ = make_client(tmp_path, [FakeResponse(200, {"vulns": [{"id": "GHSA-0001"}]})])
+
+    client.query_package("lodash", "npm", "")
+    vulns, _ = client.query_package("lodash", "npm", None)
+
+    assert session.calls[0]["json"] == {"package": {"name": "lodash", "ecosystem": "npm"}}
+    assert len(session.calls) == 1
+    assert vulns == [{"id": "GHSA-0001"}]
