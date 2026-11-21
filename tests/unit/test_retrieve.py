@@ -187,3 +187,59 @@ def test_rate_limit_waits_use_the_given_sleep(tmp_path):
     service.retrieve(LOG4SHELL_INPUT)
 
     assert sleep.calls and max(sleep.calls) > 20   # one near-30 s limiter wait, faked
+
+
+# ---------------------------------------------------------------------------
+# The public retrieve(): one shared service per process, settings from .env
+# ---------------------------------------------------------------------------
+
+import pytest
+
+import src.retrieval as retrieval
+
+
+@pytest.fixture
+def fresh_default(tmp_path, monkeypatch):
+    """A clean default service that reads a .env in tmp_path and caches in tmp_path."""
+    env_file = tmp_path / ".env"
+    env_file.write_text(f"NVD_API_KEY=from-dotenv\nCVE_CACHE_PATH={tmp_path / 'c.sqlite3'}\n", encoding="utf-8")
+    monkeypatch.setattr(retrieval, "ENV_FILE", env_file)
+    monkeypatch.delenv("NVD_API_KEY", raising=False)
+    monkeypatch.delenv("CVE_CACHE_PATH", raising=False)
+    retrieval.default_service.cache_clear()
+    yield env_file
+    retrieval.default_service.cache_clear()
+
+
+def test_default_service_is_shared(fresh_default):
+    assert retrieval.default_service() is retrieval.default_service()
+
+
+def test_default_service_reads_the_env_file(fresh_default, tmp_path):
+    service = retrieval.default_service()
+
+    assert service.nvd.headers == {"apiKey": "from-dotenv"}
+    assert service.osv.cache.path == tmp_path / "c.sqlite3"
+
+
+def test_real_environment_variables_win_over_the_env_file(fresh_default, monkeypatch):
+    monkeypatch.setenv("NVD_API_KEY", "from-environment")
+
+    assert retrieval.default_service().nvd.headers == {"apiKey": "from-environment"}
+
+
+def test_retrieve_uses_the_default_service(monkeypatch):
+    class StubService:
+        def retrieve(self, extraction):
+            return ("result for", extraction)
+
+    monkeypatch.setattr(retrieval, "default_service", lambda: StubService())
+
+    assert retrieval.retrieve({"packages": []}) == ("result for", {"packages": []})
+
+
+# NFR9: NVD asks apps that use its API to show this notice; the UI (Task 4) imports it.
+def test_nvd_notice_is_exported():
+    assert retrieval.NVD_NOTICE == (
+        "This product uses data from the NVD API but is not endorsed or certified by the NVD."
+    )

@@ -52,3 +52,19 @@ def build_service(session, env, clock=time.monotonic, sleep=time.sleep) -> Vulne
         nvd=NvdClient(session, cache, limiter, api_key=settings.nvd_api_key, sleep=sleep),
         kev=KevClient(session, cache, sleep=sleep),
     )
+
+
+# --- Stubs for the next step ---------------------------------------------------
+import functools
+
+ENV_FILE = PROJECT_ROOT / ".env"
+NVD_NOTICE = ""
+
+
+@functools.lru_cache(maxsize=1)
+def default_service():
+    raise NotImplementedError
+
+
+def retrieve(extraction):
+    raise NotImplementedError
