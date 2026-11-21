@@ -2,6 +2,9 @@
 
 from pathlib import Path
 
+import threading
+import time
+
 import pytest
 import requests
 
@@ -39,6 +42,13 @@ def test_relative_cache_path_is_resolved_from_the_project_root(tmp_path, monkeyp
     settings = read_settings({"CVE_CACHE_PATH": "cache/demo.sqlite3"})
 
     assert settings.cache_path == PROJECT_ROOT / "cache" / "demo.sqlite3"
+
+
+# "~" means the home folder, not a folder named "~" inside the project.
+def test_tilde_in_cache_path_means_the_home_folder():
+    settings = read_settings({"CVE_CACHE_PATH": "~/cves.sqlite3"})
+
+    assert settings.cache_path == Path.home() / "cves.sqlite3"
 
 
 def test_absolute_cache_path_is_kept(tmp_path):
@@ -204,13 +214,36 @@ def fresh_default(tmp_path, monkeypatch):
     monkeypatch.setattr(retrieval, "ENV_FILE", env_file)
     monkeypatch.delenv("NVD_API_KEY", raising=False)
     monkeypatch.delenv("CVE_CACHE_PATH", raising=False)
-    retrieval.default_service.cache_clear()
+    retrieval.reset_default_service()
     yield env_file
-    retrieval.default_service.cache_clear()
+    retrieval.reset_default_service()
 
 
 def test_default_service_is_shared(fresh_default):
     assert retrieval.default_service() is retrieval.default_service()
+
+
+# Two requests arriving together on a fresh app must still share one service (one NVD limiter).
+def test_default_service_is_built_once_under_concurrent_first_use(fresh_default, monkeypatch):
+    real_build = retrieval.build_service
+    builds = []
+
+    def slow_build(*args, **kwargs):
+        time.sleep(0.05)  # widen the window in which a second thread could start building
+        builds.append(1)
+        return real_build(*args, **kwargs)
+
+    monkeypatch.setattr(retrieval, "build_service", slow_build)
+    services = []
+    threads = [threading.Thread(target=lambda: services.append(retrieval.default_service())) for _ in range(4)]
+
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert len(builds) == 1
+    assert all(service is services[0] for service in services)
 
 
 def test_default_service_reads_the_env_file(fresh_default, tmp_path):

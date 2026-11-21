@@ -80,6 +80,11 @@ def default_service() -> VulnerabilityService:
     return build_service(requests.Session(), env)
 
 
+def reset_default_service() -> None:
+    """Forget the shared service (tests use this). Stub: still backed by lru_cache."""
+    default_service.cache_clear()
+
+
 def retrieve(extraction: dict) -> RetrievalResult:
     """Look up the vulnerabilities for Task 1's extraction (design spec section 4)."""
     return default_service().retrieve(extraction)
