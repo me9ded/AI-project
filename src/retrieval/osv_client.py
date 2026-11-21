@@ -24,6 +24,7 @@ class OsvClient:
     def query_package(self, name: str, ecosystem: str, version: str | None) -> tuple[list[dict], bool]:
         """Vulnerabilities affecting `name` at `version` (all versions if None).
         Returns (vulns, is_stale)."""
+        version = version or None  # "" means unknown too, so request and cache key agree
         body = {"package": {"name": name, "ecosystem": ecosystem}}
         if version is not None:
             body["version"] = version
