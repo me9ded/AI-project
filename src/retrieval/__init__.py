@@ -10,8 +10,8 @@ Settings come from `.env` in the project root (see `.env.example`); real
 environment variables win over the file.
 """
 
-import functools
 import os
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -47,11 +47,12 @@ class Settings:
 def read_settings(env) -> Settings:
     """Settings from environment variables.
 
-    A blank NVD_API_KEY means no key. A relative CVE_CACHE_PATH is resolved from the
-    project root, so the cache does not depend on the folder the app starts in.
+    A blank NVD_API_KEY means no key. "~" in CVE_CACHE_PATH is the home folder; a
+    relative path is resolved from the project root, so the cache does not depend on
+    the folder the app starts in.
     """
     api_key = (env.get("NVD_API_KEY") or "").strip() or None
-    cache_path = Path(env.get("CVE_CACHE_PATH") or DEFAULT_CACHE_PATH)
+    cache_path = Path(env.get("CVE_CACHE_PATH") or DEFAULT_CACHE_PATH).expanduser()
     if not cache_path.is_absolute():
         cache_path = PROJECT_ROOT / cache_path
     return Settings(nvd_api_key=api_key, cache_path=cache_path)
@@ -73,16 +74,29 @@ def build_service(session, env, clock=time.monotonic, sleep=time.sleep) -> Vulne
     )
 
 
-@functools.lru_cache(maxsize=1)
+_default_service: VulnerabilityService | None = None
+_default_service_lock = threading.Lock()
+
+
 def default_service() -> VulnerabilityService:
-    """One service per process, so every request shares the same NVD rate limiter."""
-    env = {**dotenv_values(ENV_FILE), **os.environ}  # read .env without changing os.environ
-    return build_service(requests.Session(), env)
+    """One service per process, so every request shares the same NVD rate limiter.
+
+    Built under a lock: two requests arriving together on a fresh app must not
+    each build their own service (and limiter).
+    """
+    global _default_service
+    with _default_service_lock:
+        if _default_service is None:
+            env = {**dotenv_values(ENV_FILE), **os.environ}  # read .env without changing os.environ
+            _default_service = build_service(requests.Session(), env)
+        return _default_service
 
 
 def reset_default_service() -> None:
-    """Forget the shared service (tests use this). Stub: still backed by lru_cache."""
-    default_service.cache_clear()
+    """Forget the shared service, so the next call builds a new one (tests use this)."""
+    global _default_service
+    with _default_service_lock:
+        _default_service = None
 
 
 def retrieve(extraction: dict) -> RetrievalResult:
