@@ -224,3 +224,42 @@ def test_forbidden_is_not_retried_and_keeps_its_status(tmp_path):
 
     assert error.value.status_code == 403
     assert len(session.calls) == 1
+
+
+# N14: an NVD reply with an unexpected shape is a failed request: RetrievalError,
+# nothing cached (so the next call asks again), and the stale fallback applies.
+MISSING_CVE = {"totalResults": 1, "vulnerabilities": [{"unexpected": True}]}
+MISSING_SCORE = {"totalResults": 1, "vulnerabilities": [{"cve": {
+    "id": "CVE-2021-44228", "metrics": {"cvssMetricV31": [{"type": "Primary"}]}}}]}
+
+
+@pytest.mark.parametrize("body", [MISSING_CVE, MISSING_SCORE])
+def test_unexpected_reply_raises_retrieval_error(tmp_path, body):
+    client, _, _ = make_client(tmp_path, [FakeResponse(200, body)])
+
+    with pytest.raises(RetrievalError):
+        client.get_cve("CVE-2021-44228")
+
+
+def test_unexpected_reply_is_not_cached(tmp_path):
+    client, session, _ = make_client(tmp_path, [FakeResponse(200, MISSING_CVE), log4shell_response()])
+    with pytest.raises(RetrievalError):
+        client.get_cve("CVE-2021-44228")
+
+    cve, is_stale = client.get_cve("CVE-2021-44228")
+
+    assert len(session.calls) == 2
+    assert cve.cvss_score == 10.0
+    assert is_stale is False
+
+
+def test_unexpected_reply_falls_back_to_stale_cache(tmp_path):
+    clock = FakeClock()
+    client, _, _ = make_client(tmp_path, [log4shell_response(), FakeResponse(200, MISSING_CVE)], clock=clock)
+    client.get_cve("CVE-2021-44228")
+    clock.advance(ONE_DAY * 2)
+
+    cve, is_stale = client.get_cve("CVE-2021-44228")
+
+    assert cve.cvss_score == 10.0
+    assert is_stale is True
