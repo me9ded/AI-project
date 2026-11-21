@@ -95,6 +95,7 @@ Mark a box only when its tests are green and committed.
 - [x] Red/Green: advisory IDs, CVE IDs, record keys (S4–S10): one record per vulnerability per package
 - [x] Red/Green: failures (S11–S15, S18, S19, S22–S26): stale data, outages skip a source for the request, 4xx = bad input, unknown IDs and versions skipped with warnings
 - [x] Refactor: fixture checks use the service's `package_entry` (one merge helper)
+- [x] Review fixes, Red/Green: records grouped by ecosystem and version (S27, S28), malformed package entries skipped (S29)
 
 ## 10. Entry point – `src/retrieval/__init__.py`
 - [ ] Red: `retrieve()` builds the real clients (check the wiring with a fake session, no network)
@@ -122,6 +123,6 @@ Mark a box only when its tests are green and committed.
 | osv_client | O1–O12 | ☑ 19 passing |
 | nvd_client | N1–N14 | ☑ 21 passing |
 | kev_client | K1–K5 | ☑ 9 passing |
-| vulnerability_service | S1–S26 | ☑ 31 passing |
+| vulnerability_service | S1–S29 | ☑ 35 passing |
 | fixtures | sanity + refresh script | ☑ 14 passing |
 | live | L1–L2 | ☐ |

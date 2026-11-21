@@ -47,7 +47,7 @@ NVD CPE configuration matching (OSV ranges are more precise for packages), and a
 | FR6 | Set `in_kev = True` for every CVE listed in the CISA KEV catalog. |
 | FR7 | Version matcher: decide whether a version is inside OSV `ECOSYSTEM`/`SEMVER` ranges for PyPI, npm and Maven (section 6). |
 | FR8 | For each package, work out the lowest version that fixes **all** of its known vulnerabilities (demo: log4j-core 2.14.1 → 2.17.1). |
-| FR9 | Produce one record per vulnerability **per package**, keyed by CVE ID, or by the OSV ID when there is no CVE alias. The same vulnerability reached through two paths gives one record; the same CVE in two input packages gives one record for each (a record has one `package_name`). A CVE or advisory with no package merges into an existing record for that ID. |
+| FR9 | Produce one record per vulnerability **per package version** (records are grouped by CVE, ecosystem, normalised name and version), keyed by CVE ID, or by the OSV ID when there is no CVE alias. The same vulnerability reached through two paths gives one record; the same CVE in two input packages gives one record for each (a record has one `package_name`). A CVE or advisory with no package merges into an existing record for that ID. |
 | FR10 | Severity rules (section 7.3): CVSS score → FIRST rating. If there is no score, use the OSV label. If there is no label, use `PENDING`. |
 | FR11 | Never invent identifiers. Every ID in the output comes from the input or from an API response. |
 
@@ -147,6 +147,8 @@ class VulnerabilityRecord(BaseModel):
 class RetrievalResult(BaseModel):
     records: list[VulnerabilityRecord]       # sorted by cvss_score, highest first (None last)
     recommended_upgrades: dict[str, str]     # package_name → lowest version fixing all its vulns
+                                             # (a package installed at two versions gets the higher upgrade;
+                                             #  one name in two ecosystems keeps the first and adds a warning)
     incomplete: bool                         # True if any data is stale or missing
     warnings: list[str]                      # human-readable explanations
 ```
@@ -256,6 +258,7 @@ From 2.11.0 the same data gives **2.12.4**, because the 2.12 branch fixes for al
 | API fails, nothing cached | skip that lookup, `incomplete = True`, warning `"<source> unavailable for <key>"` |
 | NVD unknown CVE (`totalResults: 0`) | no enrichment, severity falls back to OSV, no warning |
 | Ecosystem `unknown` / unparsable version | skip the package, warning |
+| Package entry without `name` or `ecosystem` | skip the entry, warning (no crash) |
 | API answers 4xx other than 429 (`RetrievalError.status_code`) | bad input, not an outage: skip that item with a warning, `incomplete` unchanged |
 | Unknown advisory ID (`get_vuln` → `None`) | no record, warning, `incomplete` unchanged |
 | Empty extraction | empty result, no network calls |
@@ -455,6 +458,9 @@ Clocks and `sleep` are fakes, so no test actually waits.
 | S19 | OSV entry with an unparsable version | that vuln is skipped with a warning, the rest still returned | §7.2 |
 | S24 | `cve_ids` contains a CVE that neither OSV nor NVD knows | no record, a warning, `incomplete` stays False | FR11 |
 | S25 | OSV returns a vuln that does not list the queried package under any spelling | skipped with a warning | FR2 |
+| S27 | one package at two versions (two jars on a classpath) | a record per version; the upgrade is the higher of the two | FR8, FR9 |
+| S28 | the same name in npm and PyPI, one CVE affecting both | two records with their own fixed versions; upgrade clash reported as a warning | FR9 |
+| S29 | package entries missing `name` or `ecosystem` | skipped with a warning each, the rest still looked up | §7.2 |
 | S26 | one vuln has a fix above the installed version, another has none | upgrade from the fixable one; a warning names the unfixable CVE | FR8 |
 
 ### 9.9 `tests/integration/test_live.py` (`@pytest.mark.live`, skipped by default)
