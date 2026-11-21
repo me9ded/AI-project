@@ -1,6 +1,10 @@
 """Tests for src/retrieval/nvd_client.py (design spec section 5, test IDs N1-N13)."""
 
+import pytest
+import requests
+
 from src.retrieval.cache import SqliteCache
+from src.retrieval.rate_limiter import RetrievalError
 from src.retrieval.nvd_client import NvdClient
 from tests.unit.fakes import FakeClock, FakeResponse, FakeSession, FakeSleep, load_fixture
 
@@ -170,3 +174,53 @@ def test_english_description_chosen_when_not_first(tmp_path):
     cve, _ = client.get_cve("CVE-2026-0001")
 
     assert cve.summary == "Description"
+
+
+# ---------------------------------------------------------------------------
+# Rate limit and failures
+# ---------------------------------------------------------------------------
+
+ONE_DAY = 24 * 60 * 60
+
+
+# N9: every attempt, retries included, counts against NVD's limit.
+def test_every_attempt_goes_through_the_limiter(tmp_path):
+    client, session, limiter = make_client(tmp_path, [FakeResponse(503), log4shell_response()])
+
+    client.get_cve("CVE-2021-44228")
+
+    assert len(session.calls) == 2
+    assert limiter.acquired == 2
+
+
+# N10: a body that is not JSON is a failed request (so the stale fallback still applies).
+def test_bad_json_raises_retrieval_error(tmp_path):
+    client, _, _ = make_client(tmp_path, [FakeResponse(200, ValueError("Expecting value"))])
+
+    with pytest.raises(RetrievalError):
+        client.get_cve("CVE-2021-44228")
+
+
+def test_falls_back_to_stale_cache_when_nvd_is_down(tmp_path):
+    clock = FakeClock()
+    offline = [requests.ConnectionError("offline")] * 4
+    client, _, _ = make_client(tmp_path, [log4shell_response(), *offline], clock=clock)
+    client.get_cve("CVE-2021-44228")
+    clock.advance(ONE_DAY * 2)
+
+    cve, is_stale = client.get_cve("CVE-2021-44228")
+
+    assert cve.cvss_score == 10.0
+    assert is_stale is True
+
+
+# N11: NVD's docs don't say which status means "rate limited", and 403 also means a
+# bad API key, so 403 is reported once (status kept) instead of being retried.
+def test_forbidden_is_not_retried_and_keeps_its_status(tmp_path):
+    client, session, _ = make_client(tmp_path, [FakeResponse(403)], api_key="wrong-key")
+
+    with pytest.raises(RetrievalError) as error:
+        client.get_cve("CVE-2021-44228")
+
+    assert error.value.status_code == 403
+    assert len(session.calls) == 1
