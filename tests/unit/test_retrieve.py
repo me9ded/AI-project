@@ -2,8 +2,10 @@
 
 from pathlib import Path
 
+import pytest
 import requests
 
+import src.retrieval as retrieval
 from src.retrieval import PROJECT_ROOT, build_service, read_settings
 from tests.unit.fakes import FakeClock, FakeResponse, FakeSession, FakeSleep, load_fixture
 
@@ -192,10 +194,6 @@ def test_rate_limit_waits_use_the_given_sleep(tmp_path):
 # ---------------------------------------------------------------------------
 # The public retrieve(): one shared service per process, settings from .env
 # ---------------------------------------------------------------------------
-
-import pytest
-
-import src.retrieval as retrieval
 
 
 @pytest.fixture
