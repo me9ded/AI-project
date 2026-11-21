@@ -1,6 +1,11 @@
 """Tests for scripts/warm_cache.py (demo preparation, design spec section 10)."""
 
+import subprocess
+import sys
+
+import scripts.warm_cache as warm_cache
 from scripts.warm_cache import DEMO_INPUTS, check_offline, summarise, warm
+from src.retrieval import PROJECT_ROOT
 from src.retrieval.vulnerability_models import RetrievalResult, VulnerabilityRecord
 
 
@@ -81,3 +86,59 @@ def test_offline_check_names_inputs_whose_answer_changed():
 
     assert len(problems) == 1
     assert "b" in problems[0]
+
+
+def test_summary_uses_singular_for_one_vulnerability():
+    assert "1 vulnerability," in summarise("Demo", make_result(["CVE-1"]))
+
+
+class SameAnswerService:
+    """Gives the same prepared result for every input."""
+
+    def __init__(self, result):
+        self.result = result
+
+    def retrieve(self, extraction):
+        return self.result
+
+
+def run_main(monkeypatch, result, argv):
+    monkeypatch.setattr(warm_cache, "build_service", lambda session, env: SameAnswerService(result))
+    return warm_cache.main(argv)
+
+
+def test_complete_warm_up_exits_zero(monkeypatch, capsys):
+    code = run_main(monkeypatch, make_result(), ["--check-offline"])
+
+    assert code == 0
+    assert "Offline check: OK" in capsys.readouterr().out
+
+
+# If an API failed during the warm-up, the cache is not fully filled: say so and exit 1,
+# even though the offline answers match the (incomplete) warm-up answers.
+def test_incomplete_warm_up_is_reported_and_exits_one(monkeypatch, capsys):
+    result = make_result(incomplete=True, warnings=["NVD unavailable for CVE-2021-44228"])
+
+    code = run_main(monkeypatch, result, ["--check-offline"])
+
+    out = capsys.readouterr().out
+    assert code == 1
+    assert "Cache NOT fully filled" in out
+
+
+def test_incomplete_warm_up_without_offline_check_also_exits_one(monkeypatch, capsys):
+    code = run_main(monkeypatch, make_result(incomplete=True), [])
+
+    assert code == 1
+    assert "Cache NOT fully filled" in capsys.readouterr().out
+
+
+# Teammates may run the file directly instead of with "python -m".
+def test_script_can_be_run_as_a_file():
+    completed = subprocess.run(
+        [sys.executable, "scripts/warm_cache.py", "--help"],
+        cwd=PROJECT_ROOT, capture_output=True, text=True, timeout=60,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert "--check-offline" in completed.stdout
