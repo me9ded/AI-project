@@ -6,6 +6,7 @@ dicts; the service decides what to keep.
 """
 
 import time
+from urllib.parse import quote
 
 from src.retrieval.cache import SqliteCache, cached_fetch
 from src.retrieval.rate_limiter import RetrievalError, with_retries
@@ -46,7 +47,8 @@ class OsvClient:
         """One OSV entry by ID (GHSA-…, PYSEC-…, CVE-…). Returns (vuln, is_stale).
         An ID OSV does not know gives (None, False): a typo, not an outage."""
         try:
-            return cached_fetch(self.cache, f"osv:vuln:{vuln_id}", lambda: self._get(VULN_URL.format(id=vuln_id)))
+            url = VULN_URL.format(id=quote(vuln_id, safe=""))  # escape / ? # so the ID stays one path segment
+            return cached_fetch(self.cache, f"osv:vuln:{vuln_id}", lambda: self._get(url))
         except RetrievalError as error:
             if error.status_code == 404:
                 return None, False
