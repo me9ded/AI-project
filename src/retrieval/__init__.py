@@ -3,6 +3,7 @@
 This module wires the real clients together from the settings in `.env`.
 """
 
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -37,14 +38,17 @@ def read_settings(env) -> Settings:
     return Settings(nvd_api_key=api_key, cache_path=cache_path)
 
 
-def build_service(session, env) -> VulnerabilityService:
-    """The service with real clients sharing one HTTP session, one cache and one NVD limiter."""
+def build_service(session, env, clock=time.monotonic, sleep=time.sleep) -> VulnerabilityService:
+    """The service with real clients sharing one HTTP session, one cache and one NVD limiter.
+
+    `clock` and `sleep` drive the rate limiter and retry waits; tests pass fakes.
+    """
     settings = read_settings(env)
     cache = SqliteCache(settings.cache_path)
     nvd_limit = 50 if settings.nvd_api_key else 5  # NVD: per 30 s, with or without a key
-    limiter = RateLimiter(nvd_limit, NVD_WINDOW_SECONDS)
+    limiter = RateLimiter(nvd_limit, NVD_WINDOW_SECONDS, clock=clock, sleep=sleep)
     return VulnerabilityService(
-        osv=OsvClient(session, cache),
-        nvd=NvdClient(session, cache, limiter, api_key=settings.nvd_api_key),
-        kev=KevClient(session, cache),
+        osv=OsvClient(session, cache, sleep=sleep),
+        nvd=NvdClient(session, cache, limiter, api_key=settings.nvd_api_key, sleep=sleep),
+        kev=KevClient(session, cache, sleep=sleep),
     )
