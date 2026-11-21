@@ -15,7 +15,6 @@ returns one record per vulnerability for Task 3's Neo4j graph.
 
 - Code: [`src/retrieval/`](src/retrieval/)
 - Design and test plan: [`docs/task2-design-spec.md`](docs/task2-design-spec.md)
-- Progress checklist: [`docs/task.md`](docs/task.md)
 
 ### Setup
 
