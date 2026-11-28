@@ -271,3 +271,97 @@ def test_pip_audit_json_without_dependencies(data):
     result = parse_pip_audit(data)
     assert result.packages == [] and result.cve_ids == [] and result.advisory_ids == []
     assert result.warnings
+
+
+# ---------------------------------------------------------------------------
+# Prompt 3: screenshot OCR (ocr.py)
+# The pure helpers are tested without EasyOCR; the real-screenshot test runs only when
+# EasyOCR and its downloaded models are available (about 10 s on CPU).
+# ---------------------------------------------------------------------------
+
+import importlib.util  # noqa: E402
+import io  # noqa: E402
+
+from PIL import Image  # noqa: E402
+
+from src.parser import ocr  # noqa: E402
+
+EASYOCR_READY = importlib.util.find_spec("easyocr") is not None and all(
+    (Path.home() / ".EasyOCR" / "model" / name).exists() for name in ("craft_mlt_25k.pth", "english_g2.pth")
+)
+
+
+def test_importing_the_parser_does_not_load_easyocr():
+    import subprocess
+    import sys
+    code = "import sys, src.parser, src.parser.ocr; print('easyocr' in sys.modules or 'torch' in sys.modules)"
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
+    assert out.stdout.strip() == "False"   # heavy libraries load only when a screenshot is read
+
+
+def test_preprocess_inverts_dark_mode_and_upscales_small_images():
+    dark_small = Image.new("RGB", (500, 100), (12, 12, 12))
+    prepared = ocr.preprocess(dark_small)
+    assert prepared.mode == "L" and prepared.size == (1000, 200)   # greyscale, x2
+    assert prepared.getpixel((0, 0)) > 200                         # dark background became light
+    light_large = Image.new("RGB", (1200, 100), (250, 250, 250))
+    assert ocr.preprocess(light_large).size == (1200, 100)        # wide enough: not upscaled
+
+
+def test_load_image_accepts_path_bytes_and_pil():
+    path = FIXTURES / "pip_audit_dark.png"
+    assert ocr.load_image(path).size == ocr.load_image(path.read_bytes()).size
+    pil = Image.new("L", (10, 10))
+    assert ocr.load_image(pil) is pil
+
+
+@pytest.mark.parametrize("bad", [b"not an image", 42, FIXTURES / "log4shell.log"])
+def test_load_image_rejects_non_images(bad):
+    with pytest.raises(ValueError):
+        ocr.load_image(bad)
+
+
+def test_rebuild_lines_orders_boxes_like_the_screen():
+    def box(x, y, text):                       # a 40 x 20 px box at (x, y)
+        return ([[x, y], [x + 40, y], [x + 40, y + 20], [x, y + 20]], text, 0.9)
+    boxes = [box(120, 52, "PYSEC-2021-66"), box(0, 0, "Name"), box(0, 50, "jinja2"), box(60, 1, "Version"),
+             box(60, 49, "2.10")]
+    assert ocr.rebuild_lines(boxes) == "Name Version\njinja2 2.10 PYSEC-2021-66"
+
+
+@pytest.mark.parametrize("raw, fixed", [
+    ("jinja2 2.l0 PYSEC-2O19-2l7", "jinja2 2.10 PYSEC-2019-217"),
+    ("see CVE-2O21-44228", "see CVE-2021-44228"),
+    ("log4j-core-2.l4.1.jar", "log4j-core-2.14.1.jar"),
+    ("GHSA-jfh8-c2jp-5v3q", "GHSA-jfh8-c2jp-5v3q"),         # GHSA letters are real: untouched
+    ("Hello world. Look at lol.", "Hello world. Look at lol."),  # ordinary words: untouched
+])
+def test_fix_lookalikes(raw, fixed):
+    assert ocr.fix_lookalikes(raw) == fixed
+
+
+def test_missing_easyocr_gives_a_clear_error(monkeypatch):
+    import sys
+    ocr.get_reader.cache_clear()
+    monkeypatch.setitem(sys.modules, "easyocr", None)    # makes `import easyocr` fail
+    try:
+        with pytest.raises(ocr.OcrUnavailable, match="pip install"):
+            ocr.get_reader()
+    finally:
+        ocr.get_reader.cache_clear()
+
+
+@pytest.mark.skipif(not EASYOCR_READY, reason="EasyOCR or its models are not installed")
+def test_dark_screenshot_matches_the_text_version():
+    text, confidence = ocr.image_to_text(FIXTURES / "pip_audit_dark.png")
+    assert confidence >= ocr.LOW_CONFIDENCE
+    packages, _ = find_packages(text)
+    assert as_dicts(packages) == DEMO_INPUTS["pip-audit screenshot"]["packages"]
+    assert find_ids(text) == find_ids(read("pip_audit.txt")) == ([], JINJA2_PYSEC_IDS)
+
+
+@pytest.mark.skipif(not EASYOCR_READY, reason="EasyOCR or its models are not installed")
+def test_blank_image_gives_no_text():
+    buffer = io.BytesIO()
+    Image.new("RGB", (400, 100), (255, 255, 255)).save(buffer, format="PNG")
+    assert ocr.image_to_text(buffer.getvalue()) == ("", 0.0)

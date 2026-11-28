@@ -73,3 +73,35 @@ Spec: `docs/task1-brief.md`.
 - npm audit JSON: detected but not parsed (stretch item). Decided for Prompt 5: keep only its IDs and never send
   it to the LLM.
 - Saved the "consider all angles, stay compatible" instruction to Claude's memory and to CLAUDE.md.
+
+---
+
+## Step 3 – Screenshot OCR (2026-11-28)
+
+**Prompt**
+> Using docs/task1-brief.md, build src/parser/ocr.py (rule 6) and add EasyOCR to requirements.txt. I will add
+> tests/fixtures/t1/pip_audit_dark.png. Test it, log the step and commit.
+
+**Files**
+- `src/parser/ocr.py` – `image_to_text()`: greyscale → upscale small images → invert dark mode → EasyOCR →
+  drop low-confidence boxes → rebuild table lines → fix O/0 and l/1 inside versions and IDs.
+- `tests/fixtures/t1/pip_audit_dark.png` – Nibir's dark-mode terminal screenshot of `pip_audit.txt` (demo input 2).
+- `requirements.txt` – `easyocr`, `Pillow`, `numpy` (no `opencv-python`, which would clash with EasyOCR's copy).
+- `tests/unit/test_parser.py` – 15 new tests (61 for Task 1).
+
+**Checks**
+- The screenshot gives exactly the text path's result: jinja2 2.10 (= Task 2's demo input) and the same 6 PYSEC IDs,
+  mean confidence 0.90.
+- Full suite: **272 passed** (211 Task 2 + 61 Task 1). The real-OCR tests skip automatically on machines without
+  EasyOCR models.
+
+**What had to be fixed or decided**
+- Measured speed on CPU: model load ~20 s once, then 13 s per screenshot with the proposal's "upscale below
+  1,500 px" vs 7 s without, with the same accuracy. A half-size (698 px) copy failed completely without upscaling.
+  → threshold lowered to 1,000 px: normal screenshots stay fast, small ones are still rescued.
+- The half-size test also misread one row as `jinja2 2.18`. Recorded for Prompt 5: keep the most frequent version
+  per package for screenshots, with a warning.
+- The digit fix originally skipped versions after a dash (`log4j-core-2.l4.1.jar`) → fixed and tested. GHSA IDs are
+  never "fixed", because their letters are real.
+- EasyOCR and PyTorch load only when a screenshot is read, so other tasks importing `src.parser` stay fast (tested).
+- Team note: `pip install -r requirements.txt` now takes several minutes (PyTorch).

@@ -81,8 +81,9 @@ Add to `requirements.txt`: `easyocr`, `Pillow`, `numpy`, `ollama`. Do **not** ad
    - Drop any LLM package whose name does not appear in the text. Compare after lower-casing and
      removing spaces, `-`, `_` and `.` (so "Jackson databind" matches `jackson-databind`).
      Do this check **before** the Maven lookup adds the group ID.
-6. **OCR** (`ocr.py`): greyscale; upscale ×2 if narrower than 1,500 px; invert if mean brightness < 100;
-   `easyocr.Reader(["en"], gpu=False)` created once and reused; `readtext(img, detail=1)`;
+6. **OCR** (`ocr.py`): greyscale; upscale ×2 if narrower than 1,000 px (measured: 1,500 doubled the time for
+   no gain on the 1,396 px demo screenshot; see the prompt log); invert if mean brightness < 100;
+   `easyocr.Reader(["en"], gpu=torch.cuda.is_available())` created once and reused; `readtext(img, detail=1)`;
    drop boxes with confidence < 0.4; rebuild lines by each box's vertical centre, left to right;
    fix `O→0` and `l/I→1` only inside version-like or ID-like tokens (`2.l4.1 → 2.14.1`).
    Return `(text, mean_confidence)`. Then run rules 1–5 on the text with `extraction_method` `ocr+regex` / `ocr+llm`.
@@ -114,6 +115,14 @@ Tests that need Ollama or EasyOCR models are skipped automatically when they are
 - Already built (Prompt 2): `detect(text) -> Detected(kind, data)` in `detect.py` (kinds `pip-audit-json`,
   `npm-audit-json`, `text`; also handles JSON pasted after the command line); `parse_pip_audit(data) -> Extraction`
   and `NPM_AUDIT_NOT_SUPPORTED` in `scanners.py`. `parse_pip_audit` leaves `raw_text` empty: extract() fills it.
+- Already built (Prompt 3): `image_to_text(image) -> (text, mean_confidence)` in `ocr.py` (path, bytes or PIL;
+  `ValueError` for a non-image, `OcrUnavailable` without EasyOCR), `get_reader()`, `LOW_CONFIDENCE = 0.5`.
+  EasyOCR/torch are imported lazily (a test checks `import src.parser` stays light).
+- For Prompt 5 (screenshots): OCR can misread a digit in one row (a half-size test screenshot gave `jinja2 2.18`
+  next to `2.10`). If the same package appears with several versions in OCR text, keep the version seen most
+  often and add a warning. Map `ValueError` / `OcrUnavailable` to a clear warning instead of a crash.
+- For Task 4: call `src.parser.ocr.get_reader()` once at start-up (model load ~20 s; a screenshot then takes
+  ~7 s on CPU). The models (~100 MB, `~/.EasyOCR/model`) download on the first run: run it once online before the demo.
 
 ## Recording (required for the report)
 After every prompt, append to `docs/prompt-log-task1.md`: the prompt, files changed, test result, and
