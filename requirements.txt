@@ -4,5 +4,13 @@ pydantic>=2.0
 packaging>=23.0
 python-dotenv>=1.0
 
+# Task 1 - Input Parsing & Extraction
+# EasyOCR installs PyTorch (CPU on Windows/macOS; on Linux pip may pull the large CUDA build).
+# Do not add opencv-python: EasyOCR already brings opencv-python-headless, and both together break cv2.
+easyocr>=1.7
+Pillow>=10.0
+numpy>=1.26
+ollama>=0.4
+
 # Testing
 pytest>=7.4

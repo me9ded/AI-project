@@ -1,0 +1,1 @@
+Our frontend still uses lodash@4.17.15 and @angular/core@11.0.0 (see CVE-2020-8203).
