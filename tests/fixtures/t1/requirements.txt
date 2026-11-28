@@ -1,0 +1,4 @@
+# old web app
+jinja2==2.10
+requests == 2.19.0  # pinned years ago
+Flask>=2.0

