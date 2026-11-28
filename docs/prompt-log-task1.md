@@ -138,3 +138,6 @@ Spec: `docs/task1-brief.md`.
 **Checks**
 - Full suite: **285 passed** (211 Task 2 + 74 Task 1 + the real-model test with `OLLAMA_MODEL=llama3.2:3b`).
   Without that setting the real-model test is skipped, because `llama3.1:8b` (the default) is not pulled.
+- Decision (Nibir): use `llama3.2:3b` on this laptop for the demo (already installed, passes the Jackson demo,
+  faster on CPU than the proposal's `llama3.1:8b`). Set via a local, git-ignored `.env`
+  (`OLLAMA_MODEL=llama3.2:3b`); the code default stays `llama3.1:8b`, so other laptops follow the proposal.
