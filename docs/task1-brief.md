@@ -61,11 +61,13 @@ Add to `requirements.txt`: `easyocr`, `Pillow`, `numpy`, `ollama`. Do **not** ad
    `jackson-databind`, `jackson-core`, `jackson-annotations` → `com.fasterxml.jackson.core:<artifact>`.
    Anything else: keep the artifact name, set ecosystem `unknown`, add a warning.
 3. **pip-audit JSON** (`scanners.py`): each item in `dependencies` → package (`name`, `version`, PyPI);
-   each `vulns[].id` and `vulns[].aliases` → `cve_ids` / `advisory_ids` (check with the regexes).
-   `extraction_method` = `parser`. Include only dependencies that have at least one vuln (the JSON also lists
-   clean ones such as `markupsafe`), so the JSON and table versions of a scan give the same packages.
-   npm audit JSON is a stretch item: detect it, return regex results,
-   and add the warning "npm audit JSON is not supported yet".
+   each `vulns[].id` → `advisory_ids` (or `cve_ids`), CVE aliases → `cve_ids`, all via `find_ids`. GHSA aliases
+   are left out (OSV returns them anyway; each would cost Task 2 an extra OSV call), so JSON and table give the
+   same `advisory_ids`. `extraction_method` = `parser`. Include only dependencies that have at least one vuln
+   (the JSON also lists clean ones such as `markupsafe`). `skip_reason` entries become warnings.
+   npm audit JSON is a stretch item: detect it, keep only `find_ids` results (no packages, **no LLM** – a big
+   JSON is a bad LLM input and npm audit gives ranges, not installed versions), and add the warning
+   `scanners.NPM_AUDIT_NOT_SUPPORTED`.
 4. **LLM only if regex/parser found no packages** (`llm_fallback.py`):
    - `ollama.chat(model=MODEL, format=<JSON schema of {packages:[{name, version, ecosystem}]}>, options={"temperature": 0})`
    - `MODEL` comes from env var `OLLAMA_MODEL`, default `llama3.1:8b`.
@@ -109,6 +111,9 @@ Tests that need Ollama or EasyOCR models are skipped automatically when they are
   into `DEMO_INPUTS`, otherwise the offline demo misses them.
 - Already built (Prompt 1): `find_ids`, `find_packages`, `maven_name`, `name_appears_in` in `patterns.py`;
   `Package`, `Extraction` (+ `to_dict()`) in `schema.py`. Reuse them; do not duplicate the regexes.
+- Already built (Prompt 2): `detect(text) -> Detected(kind, data)` in `detect.py` (kinds `pip-audit-json`,
+  `npm-audit-json`, `text`; also handles JSON pasted after the command line); `parse_pip_audit(data) -> Extraction`
+  and `NPM_AUDIT_NOT_SUPPORTED` in `scanners.py`. `parse_pip_audit` leaves `raw_text` empty: extract() fills it.
 
 ## Recording (required for the report)
 After every prompt, append to `docs/prompt-log-task1.md`: the prompt, files changed, test result, and

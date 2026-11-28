@@ -40,3 +40,36 @@ Spec: `docs/task1-brief.md`.
   coordinates are not recognised yet (future work).
 - Follow-up for Task 2: the real jinja2 scan includes 6 advisory IDs while `DEMO_INPUTS` has none (see brief,
   "Integration notes").
+
+---
+
+## Step 2 – pip-audit JSON reader (2026-11-28)
+
+**Prompt**
+> Using docs/task1-brief.md, build src/parser/detect.py and src/parser/scanners.py (rule 3). Add pip_audit.json
+> from a real pip-audit run, test it, log the step and commit. PROCEED consider all angles about this task since i
+> have no background knowledge about this, and make sure you finish it in a way that doesn't contradict future
+> improvements and other codes, and remember this before all of the future tasks.
+
+**Files**
+- `src/parser/detect.py` – `detect(text)`: pip-audit JSON, npm audit JSON (npm 6 and 7+) or plain text. Never raises.
+- `src/parser/scanners.py` – `parse_pip_audit(data)`: packages with vulns, CVE IDs and advisory IDs from the JSON.
+- `tests/unit/test_parser.py` – 23 new tests (46 for Task 1).
+- `docs/task1-brief.md` – rule 3 and integration notes updated.
+- `pip_audit.json` was already added in step 1 from the same real pip-audit 2.10.1 run, so both fixtures describe
+  the same scan.
+
+**Checks**
+- The JSON gives exactly Task 2's demo packages (jinja2 2.10) and the same 6 PYSEC IDs as the table version.
+- Full suite: **257 passed** (211 Task 2 + 46 Task 1).
+
+**What had to be fixed or decided**
+- Read Task 2's `retrieve()` first: CVE IDs merge into existing records at no cost, but each advisory ID costs one
+  OSV call. GHSA aliases add no new information (OSV returns them), so only each vuln's own ID is kept: 6 advisory
+  IDs instead of 12, and the JSON and screenshot paths now agree.
+- The JSON also lists `markupsafe` with no vulns → only packages with vulns are findings.
+- Robustness: JSON pasted after the `$ pip-audit ...` command line, the older list format, `skip_reason` entries,
+  unknown ID types (SNYK) and broken entries are all handled without crashing.
+- npm audit JSON: detected but not parsed (stretch item). Decided for Prompt 5: keep only its IDs and never send
+  it to the LLM.
+- Saved the "consider all angles, stay compatible" instruction to Claude's memory and to CLAUDE.md.

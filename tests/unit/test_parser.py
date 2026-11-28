@@ -172,3 +172,102 @@ def test_name_appears_in_text():
     assert name_appears_in("com.fasterxml.jackson.core:jackson-databind", note)
     assert not name_appears_in("spring-core", note)   # an invented package is rejected
     assert not name_appears_in("", note)
+
+
+# ---------------------------------------------------------------------------
+# Prompt 2: format detection (detect.py) and the pip-audit JSON reader (scanners.py)
+# ---------------------------------------------------------------------------
+
+import json  # noqa: E402
+
+from src.parser.detect import detect  # noqa: E402
+from src.parser.scanners import parse_pip_audit  # noqa: E402
+
+JINJA2_PYSEC_IDS = [
+    "PYSEC-2021-66", "PYSEC-2019-217", "PYSEC-2026-1473",
+    "PYSEC-2026-1474", "PYSEC-2026-1475", "PYSEC-2026-1471",
+]
+
+
+@pytest.mark.parametrize("fixture, kind", [
+    ("pip_audit.json", "pip-audit-json"),
+    ("pip_audit.txt", "text"),
+    ("log4shell.log", "text"),
+    ("jackson_note.txt", "text"),
+    ("npm_note.txt", "text"),
+])
+def test_detect_fixtures(fixture, kind):
+    assert detect(read(fixture)).kind == kind
+
+
+@pytest.mark.parametrize("text", ["", None, "  ", "{not json", '{"a": 1}', "[1, 2, 3]", '"just a string"'])
+def test_detect_non_scanner_input_is_text(text):
+    assert detect(text) == ("text", None)
+
+
+@pytest.mark.parametrize("report", [
+    {"auditReportVersion": 2, "vulnerabilities": {"lodash": {"name": "lodash", "range": "<=4.17.20"}}},  # npm 7+
+    {"advisories": {"1523": {"module_name": "lodash"}}, "actions": []},                                 # npm 6
+])
+def test_detect_npm_audit(report):
+    assert detect(json.dumps(report)).kind == "npm-audit-json"
+
+
+def test_detect_json_pasted_after_the_command():
+    pasted = "$ pip-audit -r requirements.txt -f json\n" + read("pip_audit.json")
+    assert detect(pasted).kind == "pip-audit-json"
+
+
+def test_detect_old_pip_audit_list_format():
+    old = [{"name": "jinja2", "version": "2.10", "vulns": [{"id": "PYSEC-2019-217", "aliases": []}]}]
+    found = detect(json.dumps(old))
+    assert found.kind == "pip-audit-json" and found.data == {"dependencies": old}
+
+
+def test_pip_audit_json_matches_task2_demo_input():
+    result = parse_pip_audit(detect(read("pip_audit.json")).data)
+    assert as_dicts(result.packages) == DEMO_INPUTS["pip-audit screenshot"]["packages"]  # markupsafe (no vulns) left out
+    assert result.source_type == "pip-audit" and result.extraction_method == "parser"
+    assert result.advisory_ids == JINJA2_PYSEC_IDS          # same IDs as the table: no GHSA/SNYK aliases
+    assert result.cve_ids == [
+        "CVE-2020-28493", "CVE-2019-10906", "CVE-2024-22195",
+        "CVE-2024-34064", "CVE-2024-56326", "CVE-2025-27516",
+    ]
+    assert result.warnings == []
+
+
+def test_json_and_table_versions_of_a_scan_agree():
+    from_json = parse_pip_audit(detect(read("pip_audit.json")).data)
+    table = read("pip_audit.txt")
+    assert from_json.packages == find_packages(table)[0]
+    assert from_json.advisory_ids == find_ids(table)[1] == JINJA2_PYSEC_IDS
+
+
+def test_pip_audit_json_odd_entries_do_not_crash():
+    data = {"dependencies": [
+        "not a dict",
+        {"version": "1.0", "vulns": []},                                          # no name
+        {"name": "privatepkg", "skip_reason": "Dependency not found on PyPI"},     # pip-audit could not check it
+        {"name": "Clean-Pkg", "version": "1.0", "vulns": []},                     # no vulns: not a finding
+        {"name": "Odd", "version": "2.0", "vulns": [
+            {"id": "SNYK-PYTHON-ODD-1", "aliases": ["GHSA-jfh8-c2jp-5v3q", "CVE-2021-44228"]},
+            "not a dict",
+        ]},
+        {"name": "noversion", "vulns": [{"id": "PYSEC-2020-1", "aliases": None}]},
+    ]}
+    result = parse_pip_audit(data)
+    assert as_dicts(result.packages) == [
+        {"name": "odd", "version": "2.0", "ecosystem": "PyPI"},
+        {"name": "noversion", "version": None, "ecosystem": "PyPI"},
+    ]
+    assert result.cve_ids == ["CVE-2021-44228"]
+    assert result.advisory_ids == ["GHSA-jfh8-c2jp-5v3q", "PYSEC-2020-1"]  # GHSA alias used: SNYK ID not recognised
+    assert any("privatepkg" in w for w in result.warnings)
+    assert any("without a package name" in w for w in result.warnings)
+
+
+@pytest.mark.parametrize("data", [None, [], {}, {"dependencies": "oops"}])
+def test_pip_audit_json_without_dependencies(data):
+    result = parse_pip_audit(data)
+    assert result.packages == [] and result.cve_ids == [] and result.advisory_ids == []
+    assert result.warnings
