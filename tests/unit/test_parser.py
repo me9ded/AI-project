@@ -492,3 +492,168 @@ def test_real_llm_reads_the_jackson_note():
     packages, _ = find_packages_with_llm(text)
     assert as_dicts(packages) == DEMO_INPUTS["Jackson databind note"]["packages"]
     assert find_ids(text) == ([], [])       # "CVE-2017-something" never becomes an ID
+
+
+# ---------------------------------------------------------------------------
+# Prompt 5: extract() - the whole pipeline (src/parser/__init__.py)
+# The LLM and OCR are replaced by fakes except in the tests marked as needing them.
+# ---------------------------------------------------------------------------
+
+from src.parser import extract  # noqa: E402
+
+CONTRACT_KEYS = ["source_type", "packages", "cve_ids", "advisory_ids", "extraction_method"]
+
+
+@pytest.fixture
+def fake_llm(monkeypatch):
+    """Replace Ollama: every call returns `reply` and is recorded in `calls`."""
+    class Llm:
+        reply = {"packages": []}
+        calls = []
+
+        def __call__(self, messages, schema):
+            self.calls.append(messages)
+            return json.dumps(self.reply)
+    llm = Llm()
+    monkeypatch.setattr(llm_fallback, "ollama_chat", llm)
+    return llm
+
+
+@pytest.fixture
+def fake_ocr(monkeypatch):
+    """Replace EasyOCR: image_to_text returns (`text`, `confidence`) or raises `error`."""
+    class Ocr:
+        text, confidence, error = "", 0.9, None
+
+        def __call__(self, image):
+            if self.error:
+                raise self.error
+            return self.text, self.confidence
+    fake = Ocr()
+    monkeypatch.setattr(ocr, "image_to_text", fake)
+    return fake
+
+
+def test_extract_log4shell_equals_task2_demo_input(fake_llm):
+    out = extract(text=read("log4shell.log"))
+    assert {k: out[k] for k in CONTRACT_KEYS} == {k: DEMO_INPUTS["Log4Shell log line"][k] for k in CONTRACT_KEYS}
+    assert fake_llm.calls == []                       # regex found packages: the LLM is not used
+
+
+def test_extract_jackson_note_equals_task2_demo_input(fake_llm):
+    fake_llm.reply = JACKSON_REPLY
+    out = extract(text=read("jackson_note.txt"))
+    assert {k: out[k] for k in CONTRACT_KEYS} == {k: DEMO_INPUTS["Jackson databind note"][k] for k in CONTRACT_KEYS}
+    assert len(fake_llm.calls) == 1
+
+
+@pytest.mark.skipif(not EASYOCR_READY, reason="EasyOCR or its models are not installed")
+def test_extract_screenshot_equals_task2_demo_input(fake_llm):
+    out = extract(image=FIXTURES / "pip_audit_dark.png")
+    demo = DEMO_INPUTS["pip-audit screenshot"]
+    for key in ["source_type", "packages", "cve_ids", "extraction_method"]:
+        assert out[key] == demo[key]
+    # The screenshot also shows its advisory IDs; Task 2's DEMO_INPUTS lists none yet (see brief, integration notes).
+    assert out["advisory_ids"] == JINJA2_PYSEC_IDS
+    assert out["ocr_confidence"] >= ocr.LOW_CONFIDENCE and out["warnings"] == []
+
+
+@pytest.mark.parametrize("fixture, source_type, method", [
+    ("pip_audit.txt", "pip-audit", "regex"),
+    ("pip_audit.json", "pip-audit", "parser"),
+    ("requirements.txt", "raw-log", "regex"),
+    ("npm_note.txt", "raw-log", "regex"),
+    ("java_stacktrace.log", "raw-log", "regex"),
+])
+def test_extract_text_inputs(fake_llm, fixture, source_type, method):
+    out = extract(text=read(fixture))
+    assert (out["source_type"], out["extraction_method"]) == (source_type, method)
+    assert out["packages"] and out["raw_text"] == read(fixture)
+    Extraction.model_validate(out)                    # always a valid contract
+    assert fake_llm.calls == []
+
+
+def test_extract_ids_only_text_tries_the_llm_and_keeps_the_ids(fake_llm):
+    out = extract(text=read("cve_only.txt"))
+    assert len(fake_llm.calls) == 1                   # no packages, so the LLM was asked (and found none)
+    assert out["packages"] == [] and out["extraction_method"] == "regex"
+    assert out["cve_ids"] == ["CVE-2021-44228", "CVE-2021-45046"]
+
+
+def test_extract_npm_audit_json_uses_ids_only_and_never_the_llm(fake_llm):
+    report = {"auditReportVersion": 2, "vulnerabilities": {"lodash": {
+        "name": "lodash", "range": "<=4.17.20",
+        "via": [{"title": "Prototype Pollution", "url": "https://github.com/advisories/GHSA-jfh8-c2jp-5v3q"}]}}}
+    out = extract(text=json.dumps(report))
+    assert out["source_type"] == "npm-audit" and out["packages"] == []
+    assert out["advisory_ids"] == ["GHSA-jfh8-c2jp-5v3q"]
+    assert "not supported yet" in out["warnings"][0] and fake_llm.calls == []
+
+
+def test_extract_uploaded_text_files_in_any_encoding(fake_llm):
+    expected = extract(text=read("log4shell.log"))["packages"]
+    raw = read("log4shell.log")
+    for data in (raw.encode("utf-8"), raw.encode("utf-8-sig"), raw.encode("utf-16")):   # utf-16: PowerShell `>`
+        assert extract(text=data)["packages"] == expected
+
+
+def test_extract_with_nothing_given():
+    out = extract()
+    assert out["packages"] == [] and out["warnings"] == ["No text or screenshot was given."]
+
+
+def test_extract_bad_image_gives_a_warning_not_a_crash():
+    out = extract(image=b"definitely not a picture")
+    assert out["source_type"] == "screenshot" and out["packages"] == []
+    assert "not a readable PNG or JPG" in out["warnings"][0]
+
+
+def test_extract_without_easyocr_gives_a_warning(fake_ocr):
+    fake_ocr.error = ocr.OcrUnavailable("EasyOCR is not installed. Run: pip install -r requirements.txt")
+    out = extract(image=b"png bytes")
+    assert out["packages"] == [] and "could not be read" in out["warnings"][0]
+
+
+def test_extract_low_confidence_screenshot_is_flagged(fake_ocr, fake_llm):
+    fake_ocr.text, fake_ocr.confidence = "jinja2 2.10 PYSEC-2019-217 2.10.1", 0.3
+    out = extract(image=b"png bytes")
+    assert out["packages"] == [{"name": "jinja2", "version": "2.10", "ecosystem": "PyPI"}]
+    assert out["ocr_confidence"] == 0.3 and "Low-quality screenshot" in out["warnings"][0]
+
+
+def test_extract_screenshot_keeps_the_most_common_version(fake_ocr, fake_llm):
+    # a real OCR slip seen on a half-size screenshot: one row read as 2.18 instead of 2.10
+    fake_ocr.text = read("pip_audit.txt").replace("jinja2 2.10    PYSEC-2019-217", "jinja2 2.18    PYSEC-2019-217", 1)
+    out = extract(image=b"png bytes")
+    assert out["packages"] == [{"name": "jinja2", "version": "2.10", "ecosystem": "PyPI"}]
+    assert any("kept 2.10" in w and "2.18" in w for w in out["warnings"])
+    assert out["extraction_method"] == "ocr+regex"
+
+
+def test_extract_screenshot_falls_back_to_the_llm(fake_ocr, fake_llm):
+    fake_ocr.text = read("jackson_note.txt")
+    fake_llm.reply = JACKSON_REPLY
+    out = extract(image=b"png bytes")
+    assert out["extraction_method"] == "ocr+llm"
+    assert out["packages"] == DEMO_INPUTS["Jackson databind note"]["packages"]
+
+
+def test_extract_screenshot_and_text_together(fake_ocr, fake_llm):
+    fake_ocr.text = "jinja2 2.10 PYSEC-2019-217 2.10.1"
+    out = extract(text="also lodash@4.17.15", image=b"png bytes")
+    assert [p["name"] for p in out["packages"]] == ["jinja2", "lodash"]
+
+
+# Integration: Task 1's real output goes through Task 2's real retrieval code (network answers are faked
+# from Task 2's saved fixtures), proving the two tasks fit together.
+def test_extract_output_feeds_task2_retrieve(tmp_path, fake_llm):
+    from src.retrieval import build_service
+    from tests.unit.test_retrieve import RoutingSession, fake_time
+
+    extraction = extract(text=read("log4shell.log"))
+    service = build_service(RoutingSession(), {"CVE_CACHE_PATH": str(tmp_path / "c.sqlite3")}, **fake_time())
+    result = service.retrieve(extraction)
+    records = {record.id: record for record in result.records}
+    assert records["CVE-2021-44228"].cvss_score == 10.0 and records["CVE-2021-44228"].in_kev is True
+    assert result.recommended_upgrades == {"org.apache.logging.log4j:log4j-core": "2.25.4"}
+    assert result.warnings == []

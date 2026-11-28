@@ -141,3 +141,47 @@ Spec: `docs/task1-brief.md`.
 - Decision (Nibir): use `llama3.2:3b` on this laptop for the demo (already installed, passes the Jackson demo,
   faster on CPU than the proposal's `llama3.1:8b`). Set via a local, git-ignored `.env`
   (`OLLAMA_MODEL=llama3.2:3b`); the code default stays `llama3.1:8b`, so other laptops follow the proposal.
+
+---
+
+## Step 5 – Put it together: extract() (2026-11-28)
+
+**Prompt**
+> Using docs/task1-brief.md, build extract() in src/parser/__init__.py: OCR if an image is given, then detect →
+> parser or regex → LLM only if no packages. Check every acceptance test against DEMO_INPUTS in
+> scripts/warm_cache.py, add the integration test, run the whole test suite (Task 2's tests must still pass).
+
+**Files**
+- `src/parser/__init__.py` – `extract(text=None, image=None) -> dict`, the one function the other tasks call.
+- `src/parser/ocr.py` – EasyOCR without quantization (see below); PyTorch's CPU notice silenced.
+- `README.md` – new "Task 1" section with setup and usage for Task 4.
+- `tests/unit/test_parser.py` – 18 new tests (93 for Task 1), including the Task 1 → Task 2 integration test.
+
+**Results on the real demo inputs**
+| Input | Result vs Task 2's `DEMO_INPUTS` |
+|---|---|
+| Log4Shell log (text) | identical; regex only, LLM not called |
+| Jackson note (text) | identical; method `llm` (real `llama3.2:3b`, ~7 s) |
+| pip-audit screenshot | identical packages/method; also carries the 6 PYSEC IDs that `DEMO_INPUTS` lacks (follow-up for Brian) |
+| pip-audit table / JSON (text) | same package; `source_type` `pip-audit`, method `regex` / `parser` |
+| no input, non-image upload | empty result + clear warning, no crash |
+
+**Checks**
+- Integration: `extract(log4shell.log)` → Task 2's real `retrieve()` (network faked with Task 2's fixtures) →
+  CVE-2021-44228, CVSS 10.0, in CISA KEV, upgrade to 2.25.4.
+- Full suite: **304 passed, 0 warnings** (211 Task 2 + 93 Task 1). Simulated teammate laptop (no local model):
+  303 passed, 1 skipped (the real-LLM test).
+
+**What had to be fixed or decided**
+- Uploaded text files: PowerShell's `>` saves UTF-16, which would have produced garbage → bytes are decoded by BOM.
+- The suite showed 5 warnings from EasyOCR: it uses PyTorch "quantization", which is deprecated and due to be removed
+  (a future PyTorch update could break screenshots). Measured: without it the screenshot is read faster (5 s vs 7 s)
+  with the same result. EasyOCR 1.7.2 ignores `quantize=False` for its detector because of a stray comma in its code
+  (`self.quantize=quantize,` makes a tuple), so the detector is loaded separately; a fallback covers future versions.
+- The OCR misread seen in step 3 (`2.18` vs `2.10`) is handled: the most frequent version wins, with a warning.
+- Not pushed (brief rule: only when Nibir asks).
+
+**Follow-ups for the team**
+- Brian: copy the real `extract()` output of the pip-audit screenshot (with its 6 advisory IDs) into `DEMO_INPUTS`,
+  so `warm_cache.py` caches those lookups for the offline demo.
+- Meryem: use the README "Task 1" usage (call `get_reader()` at start-up; show `warnings` and `ocr_confidence`).

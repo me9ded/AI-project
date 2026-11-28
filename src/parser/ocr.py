@@ -78,9 +78,23 @@ def get_reader():
         import torch
     except ImportError as error:
         raise OcrUnavailable("EasyOCR is not installed. Run: pip install -r requirements.txt") from error
+    gpu = torch.cuda.is_available()
     try:
-        return easyocr.Reader(["en"], gpu=torch.cuda.is_available(), verbose=False)
+        # No "quantization": EasyOCR's CPU quantization uses a PyTorch API that is deprecated and due to be
+        # removed, and on the demo screenshot it was also slower (7 s vs 5 s) with the same result.
+        # EasyOCR 1.7.2 stores `quantize=False` as the tuple (False,) (a stray comma), which still counts as
+        # True for the text detector, so the detector is loaded separately after fixing the flag.
+        reader = easyocr.Reader(["en"], gpu=gpu, verbose=False, quantize=False, detector=False)
+        reader.quantize = False
+        reader.setDetector("craft")
+        return reader
+    except AttributeError:  # a future EasyOCR without setDetector: use the normal set-up
+        pass
     except Exception as error:  # e.g. the first-run model download failed (no internet)
+        raise OcrUnavailable(f"EasyOCR could not load its models: {error}") from error
+    try:
+        return easyocr.Reader(["en"], gpu=gpu, verbose=False, quantize=False)
+    except Exception as error:
         raise OcrUnavailable(f"EasyOCR could not load its models: {error}") from error
 
 
@@ -137,10 +151,15 @@ def fix_lookalikes(text: str) -> str:
 
 def image_to_text(image: Any) -> tuple[str, float]:
     """Return (text, mean confidence 0-1). Raises ValueError for a non-image, OcrUnavailable without EasyOCR."""
+    import warnings
+
     import numpy as np
 
     prepared = preprocess(load_image(image))
-    boxes = get_reader().readtext(np.array(prepared), detail=1)
+    reader = get_reader()
+    with warnings.catch_warnings():   # PyTorch's harmless "pin_memory ... no accelerator" notice on CPU
+        warnings.filterwarnings("ignore", message=".*pin_memory.*")
+        boxes = reader.readtext(np.array(prepared), detail=1)
     kept = [box for box in boxes if box[2] >= MIN_BOX_CONFIDENCE]
     if not kept:
         return "", 0.0

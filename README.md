@@ -7,6 +7,46 @@ Each task documents its own component below.
 
 ---
 
+## Task 1 – Input Parsing & Extraction
+
+Reads pasted text (scanner output, logs, notes) or a **screenshot** and returns the packages,
+versions and vulnerability IDs in it, in the format Task 2's `retrieve()` reads.
+
+- Code: [`src/parser/`](src/parser/) · Spec: [`docs/task1-brief.md`](docs/task1-brief.md) ·
+  Prompt log: [`docs/prompt-log-task1.md`](docs/prompt-log-task1.md)
+- Pipeline: screenshot → EasyOCR → pip-audit JSON parser **or** regex → local LLM (Ollama) only if no
+  packages were found. Vulnerability IDs only ever come from the regexes, never from the LLM.
+
+### Setup
+
+```bash
+pip install -r requirements.txt        # includes EasyOCR + PyTorch: takes a few minutes
+ollama pull llama3.1:8b                # or llama3.2:3b, then set OLLAMA_MODEL in .env
+```
+
+`OLLAMA_MODEL`, `OLLAMA_HOST` and `OLLAMA_TIMEOUT` are optional `.env` settings (see `.env.example`).
+EasyOCR downloads its models (~100 MB, `~/.EasyOCR`) on first use: run one screenshot online before the demo.
+
+### Usage (Task 4)
+
+```python
+from src.parser import extract
+from src.parser.ocr import get_reader
+from src.retrieval import retrieve
+
+get_reader()                                   # once at start-up: loads the OCR models (~20 s)
+
+extraction = extract(text=pasted_text)         # or text=<uploaded file bytes>
+extraction = extract(image=upload_bytes)       # a PNG/JPG path or bytes (~5–10 s on CPU)
+result = retrieve(extraction)
+```
+
+`extract()` never raises for bad input. Show `extraction["warnings"]` in the UI (e.g. unreadable image,
+low OCR confidence via `ocr_confidence`, AI fallback unavailable) and a "nothing found" message when
+`packages`, `cve_ids` and `advisory_ids` are all empty.
+
+---
+
 ## Task 2 – Retrieval
 
 Looks up the packages and IDs found by Task 1 in **OSV.dev**, **NVD** and the
