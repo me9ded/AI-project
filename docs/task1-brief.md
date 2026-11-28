@@ -118,6 +118,12 @@ Tests that need Ollama or EasyOCR models are skipped automatically when they are
 - Already built (Prompt 3): `image_to_text(image) -> (text, mean_confidence)` in `ocr.py` (path, bytes or PIL;
   `ValueError` for a non-image, `OcrUnavailable` without EasyOCR), `get_reader()`, `LOW_CONFIDENCE = 0.5`.
   EasyOCR/torch are imported lazily (a test checks `import src.parser` stays light).
+- Already built (Prompt 4): `find_packages_with_llm(text, chat=None) -> (packages, warnings)` in `llm_fallback.py`.
+  Never raises; returns `[]` + a "Low confidence" warning if Ollama is down or answers badly twice. Besides rule 5
+  it also removes versions not in the text or shaped like a year (`2019`). Settings `OLLAMA_MODEL`, `OLLAMA_HOST`,
+  `OLLAMA_TIMEOUT` come from `.env` / environment (see `.env.example`). Default model `llama3.1:8b` must be pulled;
+  this laptop has `llama3.2:3b` (set `OLLAMA_MODEL=llama3.2:3b` in `.env`). Speed on CPU: 3B ≈ 7–20 s per note.
+- For Prompt 5: method `llm` for text, `ocr+llm` for screenshots; never call the LLM for npm audit JSON.
 - For Prompt 5 (screenshots): OCR can misread a digit in one row (a half-size test screenshot gave `jinja2 2.18`
   next to `2.10`). If the same package appears with several versions in OCR text, keep the version seen most
   often and add a warning. Map `ValueError` / `OcrUnavailable` to a clear warning instead of a crash.

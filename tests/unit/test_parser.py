@@ -365,3 +365,130 @@ def test_blank_image_gives_no_text():
     buffer = io.BytesIO()
     Image.new("RGB", (400, 100), (255, 255, 255)).save(buffer, format="PNG")
     assert ocr.image_to_text(buffer.getvalue()) == ("", 0.0)
+
+
+# ---------------------------------------------------------------------------
+# Prompt 4: LLM fallback (llm_fallback.py)
+# Most tests replace Ollama with a fake `chat` function, so they are fast and always run.
+# One test uses the real local model and is skipped when Ollama or the model is missing.
+# ---------------------------------------------------------------------------
+
+from src.parser import llm_fallback  # noqa: E402
+from src.parser.llm_fallback import find_packages_with_llm  # noqa: E402
+
+
+class FakeChat:
+    """Plays back prepared model replies and records what was sent."""
+
+    def __init__(self, *replies):
+        self.replies = list(replies)
+        self.calls = []
+
+    def __call__(self, messages, schema):
+        self.calls.append((messages, schema))
+        reply = self.replies.pop(0)
+        if isinstance(reply, Exception):
+            raise reply
+        return reply if isinstance(reply, str) else json.dumps(reply)
+
+
+JACKSON_REPLY = {"packages": [{"name": "jackson-databind", "version": "2.9.8", "ecosystem": "Maven"}]}
+
+
+def test_llm_finds_jackson_and_maps_the_maven_name():
+    packages, warnings = find_packages_with_llm(read("jackson_note.txt"), chat=FakeChat(JACKSON_REPLY))
+    assert as_dicts(packages) == DEMO_INPUTS["Jackson databind note"]["packages"]
+    assert warnings == []
+
+
+def test_llm_invented_package_is_dropped():
+    reply = {"packages": [
+        {"name": "jackson-databind", "version": "2.9.8", "ecosystem": "Maven"},
+        {"name": "spring-core", "version": "5.0.0", "ecosystem": "Maven"},   # not in the note: invented
+    ]}
+    packages, warnings = find_packages_with_llm(read("jackson_note.txt"), chat=FakeChat(reply))
+    assert as_dicts(packages) == DEMO_INPUTS["Jackson databind note"]["packages"]
+    assert any("spring-core" in w and "does not appear" in w for w in warnings)
+
+
+def test_llm_cannot_add_vulnerability_ids():
+    # the model sneaks in IDs: they are ignored, because the answer schema has no ID field
+    reply = {"packages": JACKSON_REPLY["packages"], "cve_ids": ["CVE-2017-7525"], "advisory_ids": ["GHSA-x"]}
+    chat = FakeChat(reply)
+    packages, _ = find_packages_with_llm(read("jackson_note.txt"), chat=chat)
+    assert as_dicts(packages) == DEMO_INPUTS["Jackson databind note"]["packages"]
+    schema = chat.calls[0][1]
+    assert set(schema["properties"]) == {"packages"}          # what Ollama is forced to follow
+
+
+@pytest.mark.parametrize("version, kept", [("2.9.9", None), ("2019", None), ("2.9.8", "2.9.8")])
+def test_llm_versions_must_be_real_versions_from_the_text(version, kept):
+    text = "old Jackson databind 2.9.8 from 2019"
+    reply = {"packages": [{"name": "jackson-databind", "version": version, "ecosystem": "maven"}]}
+    packages, warnings = find_packages_with_llm(text, chat=FakeChat(reply))
+    assert packages[0].version == kept
+    assert (warnings != []) == (kept is None)
+
+
+def test_llm_bad_answer_is_retried_once_with_the_error():
+    chat = FakeChat("this is not json", JACKSON_REPLY)
+    packages, warnings = find_packages_with_llm(read("jackson_note.txt"), chat=chat)
+    assert len(chat.calls) == 2 and "not valid JSON" in chat.calls[1][0][-1]["content"]
+    assert as_dicts(packages) == DEMO_INPUTS["Jackson databind note"]["packages"] and warnings == []
+
+
+def test_llm_two_bad_answers_give_low_confidence():
+    packages, warnings = find_packages_with_llm("some old jackson", chat=FakeChat("nope", '{"packages": "x"}'))
+    assert packages == [] and "Low confidence" in warnings[0]
+
+
+def test_llm_unavailable_does_not_crash():
+    packages, warnings = find_packages_with_llm("some old jackson", chat=FakeChat(ConnectionError("refused")))
+    assert packages == [] and "unavailable (ConnectionError)" in warnings[0]
+
+
+def test_llm_normalises_names_ecosystems_and_unknown_java_libraries():
+    text = "We use Django 2.2.1, LODASH 4.17.15 and the commons-text library 1.9."
+    reply = {"packages": [
+        {"name": "Django", "version": "2.2.1", "ecosystem": "python"},
+        {"name": "LODASH", "version": "4.17.15", "ecosystem": "JavaScript"},
+        {"name": "commons-text", "version": "1.9", "ecosystem": "Java"},
+        {"name": "Django", "version": "2.2.1", "ecosystem": "PyPI"},            # duplicate
+    ]}
+    packages, warnings = find_packages_with_llm(text, chat=FakeChat(reply))
+    assert as_dicts(packages) == [
+        {"name": "django", "version": "2.2.1", "ecosystem": "PyPI"},
+        {"name": "lodash", "version": "4.17.15", "ecosystem": "npm"},
+        {"name": "commons-text", "version": "1.9", "ecosystem": "unknown"},
+    ]
+    assert any("commons-text" in w for w in warnings)
+
+
+def test_llm_is_not_called_for_empty_text():
+    chat = FakeChat()
+    assert find_packages_with_llm("   ", chat=chat) == ([], []) and chat.calls == []
+
+
+def test_llm_long_input_is_cut():
+    chat = FakeChat({"packages": []})
+    _, warnings = find_packages_with_llm("x" * 10_000, chat=chat)
+    assert len(chat.calls[0][0][1]["content"]) == llm_fallback.MAX_INPUT_CHARS and warnings
+
+
+def _ollama_model_ready() -> bool:
+    try:
+        import ollama
+        env = llm_fallback.settings()
+        model = env.get("OLLAMA_MODEL") or llm_fallback.DEFAULT_MODEL
+        client = ollama.Client(host=env.get("OLLAMA_HOST") or None, timeout=5)
+        return model in {m.model for m in client.list().models}
+    except Exception:
+        return False
+
+
+@pytest.mark.skipif(not _ollama_model_ready(), reason="Ollama is not running or OLLAMA_MODEL is not pulled")
+def test_real_llm_reads_the_jackson_note():
+    text = read("jackson_note.txt")
+    packages, _ = find_packages_with_llm(text)
+    assert as_dicts(packages) == DEMO_INPUTS["Jackson databind note"]["packages"]
+    assert find_ids(text) == ([], [])       # "CVE-2017-something" never becomes an ID

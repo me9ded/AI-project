@@ -105,3 +105,36 @@ Spec: `docs/task1-brief.md`.
   never "fixed", because their letters are real.
 - EasyOCR and PyTorch load only when a screenshot is read, so other tasks importing `src.parser` stay fast (tested).
 - Team note: `pip install -r requirements.txt` now takes several minutes (PyTorch).
+
+---
+
+## Step 4 – LLM fallback (2026-11-28)
+
+**Prompt**
+> Using docs/task1-brief.md, build src/parser/llm_fallback.py (rules 4 and 5) with jackson_note.txt and a mocked test
+> where the LLM invents a package. Test it, log the step and commit.
+
+**Files**
+- `src/parser/llm_fallback.py` – `find_packages_with_llm()`: system prompt with rules and one example, Ollama
+  JSON-schema output at temperature 0, one retry with the validation error, then the guardrails.
+- `requirements.txt` – `ollama`; `.env.example` – `OLLAMA_MODEL`, `OLLAMA_HOST`, `OLLAMA_TIMEOUT`.
+- `tests/unit/test_parser.py` – 14 new tests (75 for Task 1): 13 with a fake model, 1 with the real local model.
+
+**Prompt engineering (evidence for the report)**
+- The answer schema has only a `packages` field, so the model *cannot* return CVE IDs; extra fields are ignored.
+- The system prompt lists 6 rules plus one worked example; temperature 0 keeps answers repeatable.
+- Real runs with `llama3.2:3b` on CPU: Jackson note → `com.fasterxml.jackson.core:jackson-databind 2.9.8`
+  (= Task 2's demo input) in ~20 s; "log4j core 2.14.1 and spring framework 5.3.0" → log4j-core mapped, spring left
+  as `unknown` with a warning; a note with no packages → nothing.
+- Failure found: "some old lodash from 2019" → the model returned version `2019`. Adding "a year is not a version"
+  to the prompt did **not** stop it, so a code check now removes year-shaped versions (with a warning). Lesson: a
+  prompt asks, code enforces.
+
+**Guardrails tested with a fake model**
+- invented package (`spring-core`) dropped; IDs smuggled into the answer ignored; invented or year versions removed;
+  bad JSON retried once with the error; two bad answers or Ollama down → empty result + "Low confidence" warning;
+  names/ecosystems normalised; empty text never reaches the model; long input cut to 4,000 characters.
+
+**Checks**
+- Full suite: **285 passed** (211 Task 2 + 74 Task 1 + the real-model test with `OLLAMA_MODEL=llama3.2:3b`).
+  Without that setting the real-model test is skipped, because `llama3.1:8b` (the default) is not pulled.

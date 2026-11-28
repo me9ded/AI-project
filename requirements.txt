@@ -10,6 +10,7 @@ python-dotenv>=1.0
 easyocr>=1.7
 Pillow>=10.0
 numpy>=1.26
+ollama>=0.4
 
 # Testing
 pytest>=7.4
